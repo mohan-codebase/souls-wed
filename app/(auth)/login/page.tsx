@@ -94,6 +94,16 @@ function LoginContent() {
     setShowPassword(false);
   }, [role]);
 
+  // Surface errors bounced back from the Google OAuth redirect flow
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError === "google_auth_failed") {
+      setError("Google sign-in failed. Please try again or use your email and password.");
+    } else if (oauthError === "google_not_configured") {
+      setError("Google sign-in isn't available right now. Please use your email and password.");
+    }
+  }, [searchParams]);
+
   // CheckIcon existing session on mount
   useEffect(() => {
     fetch("/api/auth/me")
@@ -450,7 +460,11 @@ function LoginContent() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => alert("Google authentication coming soon!")}
+                        onClick={() =>
+                          role === "user"
+                            ? (window.location.href = "/api/auth/google")
+                            : alert("Google authentication coming soon!")
+                        }
                         className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-2.5 rounded-xl transition-colors text-sm shadow-sm cursor-pointer"
                       >
                         <svg className="w-4 h-4" viewBox="0 0 24 24">
