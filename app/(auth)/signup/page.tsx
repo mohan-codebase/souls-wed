@@ -584,7 +584,7 @@ function SignupContent() {
                             ? "/api/auth/google?role=vendor&intent=signup"
                             : "/api/auth/google?role=user")
                       }
-                      className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-2.5 rounded-2xl transition-colors text-sm shadow-sm cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-2.5 rounded-2xl transition-colors text-sm shadow-sm cursor-pointer"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24">
                         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -594,38 +594,36 @@ function SignupContent() {
                       </svg>
                       Continue with Google
                     </button>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          (window.location.href =
-                            role === "vendor"
-                              ? "/api/auth/apple?role=vendor&intent=signup"
-                              : "/api/auth/apple?role=user")
-                        }
-                        className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white font-semibold py-2.5 rounded-2xl transition-colors text-xs shadow-sm cursor-pointer"
-                      >
-                        <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 170 170">
-                          <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.34.13-9.16-1.9-14.49-6.08-3.34-2.73-7.23-7.44-11.66-14.13-7.55-11.45-13.43-24.63-17.65-39.54-4.21-14.9-6.32-28.52-6.32-40.85 0-14.65 3.65-27.01 10.97-37.08 7.32-10.07 16.59-15.19 27.81-15.36 4.67 0 9.87 1.15 15.6 3.46 5.73 2.31 9.77 3.46 12.13 3.46 2.01 0 6.13-1.22 12.36-3.67 6.23-2.45 11.39-3.56 15.48-3.34 11.83.63 21.49 5.06 28.98 13.31-10.5 6.35-15.65 15.19-15.48 26.52.17 8.91 3.52 16.59 10.05 23.03 6.53 6.44 14.37 10.03 23.51 10.77-2.31 7.15-5.59 14.65-9.84 22.49zm-31.94-106.66c0 6.89-2.48 13.46-7.45 19.72-5.46 6.82-12.08 10.78-19.86 11.87-.25-1.01-.38-2.02-.38-3.03 0-6.98 2.65-13.79 7.95-20.44 5.3-6.64 12.13-10.63 20.49-11.96.17 1.27.25 2.55.25 3.84z"/>
-                        </svg>
-                        <span>Apple</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          (window.location.href =
-                            role === "vendor"
-                              ? "/api/auth/twitter?role=vendor&intent=signup"
-                              : "/api/auth/twitter?role=user")
-                        }
-                        className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white font-semibold py-2.5 rounded-2xl transition-colors text-xs shadow-sm cursor-pointer"
-                      >
-                        <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                        </svg>
-                        <span>Twitter (X)</span>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        (window.location.href =
+                          role === "vendor"
+                            ? "/api/auth/apple?role=vendor&intent=signup"
+                            : "/api/auth/apple?role=user")
+                      }
+                      className="w-full flex items-center justify-center gap-2.5 bg-slate-900 hover:bg-black text-white font-semibold py-2.5 rounded-2xl transition-colors text-sm shadow-sm cursor-pointer"
+                    >
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 170 170">
+                        <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.34.13-9.16-1.9-14.49-6.08-3.34-2.73-7.23-7.44-11.66-14.13-7.55-11.45-13.43-24.63-17.65-39.54-4.21-14.9-6.32-28.52-6.32-40.85 0-14.65 3.65-27.01 10.97-37.08 7.32-10.07 16.59-15.19 27.81-15.36 4.67 0 9.87 1.15 15.6 3.46 5.73 2.31 9.77 3.46 12.13 3.46 2.01 0 6.13-1.22 12.36-3.67 6.23-2.45 11.39-3.56 15.48-3.34 11.83.63 21.49 5.06 28.98 13.31-10.5 6.35-15.65 15.19-15.48 26.52.17 8.91 3.52 16.59 10.05 23.03 6.53 6.44 14.37 10.03 23.51 10.77-2.31 7.15-5.59 14.65-9.84 22.49zm-31.94-106.66c0 6.89-2.48 13.46-7.45 19.72-5.46 6.82-12.08 10.78-19.86 11.87-.25-1.01-.38-2.02-.38-3.03 0-6.98 2.65-13.79 7.95-20.44 5.3-6.64 12.13-10.63 20.49-11.96.17 1.27.25 2.55.25 3.84z"/>
+                      </svg>
+                      <span>Continue with Apple</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        (window.location.href =
+                          role === "vendor"
+                            ? "/api/auth/twitter?role=vendor&intent=signup"
+                            : "/api/auth/twitter?role=user")
+                      }
+                      className="w-full flex items-center justify-center gap-2.5 bg-slate-900 hover:bg-black text-white font-semibold py-2.5 rounded-2xl transition-colors text-sm shadow-sm cursor-pointer"
+                    >
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                      </svg>
+                      <span>Continue with Twitter (X)</span>
+                    </button>
                   </div>
 
                   {/* Already have an account */}
