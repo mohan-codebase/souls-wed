@@ -1,5 +1,5 @@
 /**
- * 🎓 BOOKING CALENDAR COMPONENT
+ * BOOKING CALENDAR COMPONENT
  * 
  * This is a custom-built interactive calendar. Here's WHY we build our own
  * instead of using a library:

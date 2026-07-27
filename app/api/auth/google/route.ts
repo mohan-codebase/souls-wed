@@ -1,5 +1,5 @@
 /**
- * 🎓 GOOGLE OAUTH — STEP 1: START THE FLOW
+ * GOOGLE OAUTH — STEP 1: START THE FLOW
  *
  * Redirects the browser to Google's account picker (the same "Sign in with
  * ___ with google.com" screen you see on other sites). We attach a random
@@ -20,8 +20,24 @@ export async function GET(req: NextRequest) {
   }
 
   const state = crypto.randomBytes(32).toString("hex");
+  const role = req.nextUrl.searchParams.get("role") === "vendor" ? "vendor" : "user";
+  const intent = req.nextUrl.searchParams.get("intent") === "signup" ? "signup" : "login";
   const cookieStore = await cookies();
   cookieStore.set("google_oauth_state", state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 5, // 5 minutes
+    path: "/",
+  });
+  cookieStore.set("google_oauth_role", role, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 5, // 5 minutes
+    path: "/",
+  });
+  cookieStore.set("google_oauth_intent", intent, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

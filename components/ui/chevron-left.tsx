@@ -12,7 +12,7 @@ export interface ChevronLeftIconHandle {
   stopAnimation: () => void;
 }
 
-interface ChevronLeftIconProps extends HTMLAttributes<HTMLDivElement> {
+interface ChevronLeftIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -38,7 +38,7 @@ const ChevronLeftIcon = forwardRef<ChevronLeftIconHandle, ChevronLeftIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -49,7 +49,7 @@ const ChevronLeftIcon = forwardRef<ChevronLeftIconHandle, ChevronLeftIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -60,7 +60,7 @@ const ChevronLeftIcon = forwardRef<ChevronLeftIconHandle, ChevronLeftIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -88,7 +88,7 @@ const ChevronLeftIcon = forwardRef<ChevronLeftIconHandle, ChevronLeftIconProps>(
             }}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

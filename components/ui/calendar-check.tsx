@@ -12,7 +12,7 @@ export interface CalendarCheckIconHandle {
   stopAnimation: () => void;
 }
 
-interface CalendarCheckIconProps extends HTMLAttributes<HTMLDivElement> {
+interface CalendarCheckIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -54,7 +54,7 @@ const CalendarCheckIcon = forwardRef<
   });
 
   const handleMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseEnter?.(e);
       } else {
@@ -65,7 +65,7 @@ const CalendarCheckIcon = forwardRef<
   );
 
   const handleMouseLeave = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseLeave?.(e);
       } else {
@@ -76,7 +76,7 @@ const CalendarCheckIcon = forwardRef<
   );
 
   return (
-    <div
+    <span
       className={cn("inline-flex items-center justify-center")}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -106,7 +106,7 @@ const CalendarCheckIcon = forwardRef<
           variants={CHECK_VARIANTS}
         />
       </svg>
-    </div>
+    </span>
   );
 });
 

@@ -1,5 +1,5 @@
 /**
- * 🎓 BOOKINGS API — POST + GET /api/bookings
+ * BOOKINGS API — POST + GET /api/bookings
  * 
  * POST: Create a new booking
  *   - Requires authenticated user (checks iron-session)

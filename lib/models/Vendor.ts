@@ -21,6 +21,7 @@ const VendorSchema = new Schema({
   businessName: { type: String },  // Brand/business name — was missing before, signup data was silently dropped
   email:        { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   passwordHash: { type: String },
+  googleId:     { type: String, unique: true, sparse: true },
   phone:        { type: String },
   category:     { type: String }, // Legacy, kept for backwards compatibility during migration
   categories:   [{ type: String }], // E.g. ["venues", "rooms", "planners", "caterers", "decorators"]
@@ -46,6 +47,7 @@ const VendorSchema = new Schema({
   resetPasswordExpires: { type: Date },
   lastLoginAt:  { type: Date },
   lastLoginDevice: { type: String },
+  lastLoginMethod: { type: String }, // "google" or "password"
   createdAt:    { type: Date, default: Date.now },
 });
 

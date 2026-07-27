@@ -12,7 +12,7 @@ export interface MessageSquareIconHandle {
   stopAnimation: () => void;
 }
 
-interface MessageSquareIconProps extends HTMLAttributes<HTMLDivElement> {
+interface MessageSquareIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -58,7 +58,7 @@ const MessageSquareIcon = forwardRef<
   });
 
   const handleMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseEnter?.(e);
       } else {
@@ -69,7 +69,7 @@ const MessageSquareIcon = forwardRef<
   );
 
   const handleMouseLeave = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseLeave?.(e);
       } else {
@@ -80,7 +80,7 @@ const MessageSquareIcon = forwardRef<
   );
 
   return (
-    <div
+    <span
       className={cn("inline-flex items-center justify-center")}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -102,7 +102,7 @@ const MessageSquareIcon = forwardRef<
       >
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </motion.svg>
-    </div>
+    </span>
   );
 });
 

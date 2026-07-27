@@ -11,7 +11,7 @@ export interface LockIconHandle {
   stopAnimation: () => void;
 }
 
-interface LockIconProps extends HTMLAttributes<HTMLDivElement> {
+interface LockIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -33,7 +33,7 @@ const LockIcon = forwardRef<LockIconHandle, LockIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -44,7 +44,7 @@ const LockIcon = forwardRef<LockIconHandle, LockIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -55,7 +55,7 @@ const LockIcon = forwardRef<LockIconHandle, LockIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -108,7 +108,7 @@ const LockIcon = forwardRef<LockIconHandle, LockIconProps>(
             }}
           />
         </motion.svg>
-      </div>
+      </span>
     );
   }
 );

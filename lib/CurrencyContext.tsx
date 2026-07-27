@@ -12,14 +12,13 @@ interface CurrencyContextType {
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const [currency, setCurrencyState] = useState<string>("INR");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("preferredCurrency");
-    if (saved && CURRENCIES[saved]) {
-      setCurrencyState(saved);
+  const [currency, setCurrencyState] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("preferredCurrency");
+      if (saved && CURRENCIES[saved]) return saved;
     }
-  }, []);
+    return "INR";
+  });
 
   const setCurrency = (code: string) => {
     if (CURRENCIES[code]) {

@@ -861,3 +861,203 @@ cards now render with `box-shadow: none`, ~10px radius, and 1px slate borders.
 running — they share `.next/` and Turbopack's cache gets corrupted (surfaces as fake
 syntax errors in the dev overlay). Stop the dev server first, or build in a separate
 checkout.
+
+### Checkout page — surfaced missing booking info, then fixed the layout
+
+The checkout page was showing only a thin slice of what the booking record actually
+holds, and the layout didn't read like a finished product. Two passes:
+
+**Pass 1 — more information.** The Booking model stores several fields the page never
+displayed. Added, all conditionally rendered so nothing shows as an empty row:
+- Booking reference (last 8 of the id, uppercased) as a badge beside the heading
+- Function type + time, combined into one line (e.g. "Wedding · Evening")
+- Special requests, when the customer left any
+- Who booked it — name, email, phone
+
+**Pass 2 — layout/UI fixes.** First attempt put contact details in their own card, which
+left two mismatched boxes and a large dead zone under the short price sidebar. Reworked:
+- Added a **Back button** (`router.back()`, matching the ArrowLeftIcon pattern used on the
+  auth pages) — the page previously had no way out except the browser control.
+- Moved the page header above the grid so both columns start at the same y-position.
+- Contact details folded into the Booking Details card as a "Booked By" subsection, and
+  switched from a fixed 3-col grid (which truncated the email) to flex-wrap so each field
+  sizes to its own content.
+- Sidebar sticky offset corrected `top-6` → `lg:top-28` (it was sliding under the fixed
+  navbar), plus `items-start` on the grid so sticky actually engages.
+- Dropped `min-h-screen`, which was forcing dead space below short content.
+- Added a "What happens next" card (3 steps) to balance the sidebar against the taller
+  left column.
+- Mobile: heading `text-xl sm:text-2xl`; details grid `grid-cols-1 sm:grid-cols-2`, with
+  the `col-span-2` children changed to `sm:col-span-2` — in a 1-column grid `span 2` would
+  have created an implicit second track and broken the mobile layout.
+
+Column heights went from 725px vs 300px to 637px vs 572px. Verified at 1440px and 375px:
+no horizontal overflow, single grid track on mobile, email/phone no longer truncated.
+
+**Verification note:** the checkout route needs a logged-in session, so it can't be viewed
+directly. Verified by generating a throwaway `preview-test` route *from the real file* via
+a script (swapping the fetch for mock data, leaving the JSX byte-identical), screenshotting
+it, then deleting it — so what was checked is exactly what ships.
+
+**Confirms the existing tooling note above:** the dev overlay reported a parse error at
+line 288 of a 308-line file, left over from a mid-edit compile. `tsc --noEmit` was clean
+and the route rendered fine — the stale-cache symptom described above, not a real error.
+
+### Follow-up — the Stripe Checkout page itself
+
+Enriching our own checkout page didn't change what Stripe shows, because the hosted
+Stripe page is built from a separate API call (`app/api/bookings/create-order/route.ts`).
+That call was sending the bare minimum: a product name and an amount. Nothing else —
+no dates, no guest count, no email prefill.
+
+Added to the Checkout Session:
+- **Line-item description** — dates, guest/room count, function type & time, total, and the
+  balance payable at the venue. Stripe renders raw text, so the title-casing has to be done
+  server-side (our own page relies on the CSS `capitalize` class, which doesn't travel).
+- **Venue image** on the Stripe page, pulled by upgrading the existing `Venue.exists()`
+  lookup to a `findOne` with an `image` projection — same single query, no extra round trip.
+  Guarded to only pass absolute `http(s)` URLs, since Stripe can't fetch a localhost path.
+- **`customer_email`** so the email field arrives prefilled instead of blank.
+- **`client_reference_id`** + a 16-key **metadata** block (booking ref, provider, customer
+  name/email/phone, dates, guests, amounts, special requests) so support can reconcile a
+  payment from the Stripe dashboard without opening the database.
+- **`payment_intent_data`** with a description and `receipt_email`, so the charge and the
+  emailed receipt are also identifiable.
+
+Verified against the live sandbox API, not just by reading the code: created real test
+sessions with the exact params, loaded the hosted page, and confirmed the description,
+image, and prefilled email all render. Retrieved the session back to confirm all 16
+metadata keys persisted (Stripe's cap is 50). `metadata.bookingId` is unchanged, so the
+existing webhook at `app/api/webhooks/stripe/route.ts:31` still resolves the booking.
+
+`tsc --noEmit` surfaced one real bug during this: `titleCase(s?: string)` rejected the
+Mongoose fields, which are typed `string | null`. Fixed the signature; project typecheck
+is clean for both changed files.
+
+---
+
+## Session 10 — 25 July 2026
+
+### Venue detail page: content restructured Booking.com-style
+
+Session 9 made the detail pages *look* like Booking.com (flat surfaces, thin borders,
+no bouncy hovers). The client came back pointing at a live Booking.com property page —
+`booking.com/hotel/gb/studios2let.html` — and asked for the **content** to match too:
+the description and amenities blocks specifically. On our page the description was a
+single thin paragraph and every amenity was dumped into one undifferentiated row of
+pill tags, whichever category it belonged to.
+
+**Note on the reference:** Booking.com blocks automated fetches (their edge returns a
+`202` bot challenge to both `curl` and the in-app browser), so the layout was rebuilt
+from the standard Booking property-page structure rather than scraped from that URL.
+
+Three new sections, all fed from data we already hold:
+
+- **Overview** (`components/venues/VenueAbout.tsx`) — the description as generous body
+  copy that collapses behind "Show more" past 420 characters, a bordered **Property
+  highlights** panel beside it (location, capacity, spaces, rooms, catering, parking),
+  the "couples rated it X out of 5" callout, and Booking's **Most popular facilities**
+  strip with a per-facility icon.
+- **Facilities of {venue}** (`components/venues/VenueFacilities.tsx`) — the pill row
+  replaced by a 3-column grid of *headed categories* with green ticks, collapsing to 6
+  categories behind "Show all N facilities".
+- **Good to Know** (`components/venues/VenueGoodToKnow.tsx`) — our equivalent of
+  Booking's house-rules table: label/detail rows for capacity, spaces, catering,
+  accommodation, parking, payment and getting there.
+
+Tab bar and scroll-spy updated to `Overview / Areas Available / Facilities / Videos /
+Pricing / Good to Know / Reviews`, and the description now leads the page the way it
+does on Booking.
+
+### The grouping problem
+
+Booking groups facilities under headings ("Food & drink", "Parking", "Accessibility").
+We can't: the vendor dashboard captures facilities as **one free-text, comma-separated
+string** (`app/(dashboard)/vendor/dashboard/page.tsx:1719`), so there is no category on
+the record to group by. `lib/venue-amenities.ts` infers it from the wording instead —
+10 categories, keyword-matched, with an "General" bucket for anything unrecognised, and
+the structured flags (`indoor`, `outdoor`, `parking`, `catering`, `rooms`) folded into
+the same groups so they aren't listed twice.
+
+Two things that needed care:
+
+- **Keywords match on a word boundary.** A bare `ac` for "air conditioning" matches
+  *terr-ac-e*; `av` for "AV & Lighting" matches *av-ailable*. Short tokens carry their
+  own trailing `\b`.
+- **Category order is not display order.** `CATEGORIES` is ordered for match
+  specificity — Accessibility first, so "Wheelchair Accessible" can't be swallowed by a
+  broader rule. Reusing that order for the highlight strip opened it with
+  "Wheelchair Accessible, CCTV Security", which reads as a safety warning rather than a
+  selling point. The strip now draws from a separate `POPULAR_ORDER` (catering, spaces,
+  stay, parking first) and round-robins one item per category so it summarises the whole
+  list instead of the first category's contents.
+
+### Nothing invented
+
+Every row is derived from a field the venue actually filled in. Where we hold no data
+the copy prompts the visitor to ask the venue ("In-house catering isn't listed for this
+venue — ask them which outside caterers they work with") rather than stating a policy we
+made up. The one hard number, the 30% advance, is the real
+`ADVANCE_PERCENTAGE` from `app/api/bookings/route.ts:30`.
+
+### Verified
+
+`tsc --noEmit` clean. **Every venue currently in MongoDB has an empty `features` array**,
+so on live data the Facilities section shows only the flag-derived items (e.g. "Indoor
+banquet hall") — the layout is right, the data isn't there yet. Verified the grouped
+layout by stubbing the `/api/venues` response over a client-side navigation with a
+realistic 18-facility list: sorted correctly into **22 facilities across 10 categories**
+(Wheelchair → Accessibility, CCTV/Generator → Safety, Valet/Shuttle → Parking, Bar →
+Food & drink, AV/Floral → Décor, Bridal Suite → Rooms), "Show all" expands to all 10,
+and the strip leads with "In-house catering".
+
+Computed styles confirm the layout: Overview `506px 290px`, Facilities
+`238px 238px 238px`, Good to Know rows `190px 564px`; all collapse to a single column at
+375px with no horizontal overflow. Screenshots weren't possible — the in-app browser pane
+wasn't compositing frames this session — so it was checked through the DOM and computed
+styles instead.
+
+### Outstanding
+
+- **The vendor form is the bottleneck.** Categories are inferred from free text, so a
+  vendor typing "Aircon" or a facility we have no keyword for lands in "General". The
+  real fix is a checkbox/multi-select facility picker in the vendor dashboard writing
+  structured categories; the taxonomy in `lib/venue-amenities.ts` is the list to build
+  it from.
+- **No venue has facilities filled in.** Until vendors populate `features`, the section
+  looks sparse in production.
+- **Real house rules need schema fields.** "Good to Know" covers what we hold; proper
+  Booking-style rules (event timings, alcohol/decor policy, cancellation terms) need new
+  `Venue` fields plus form inputs.
+- The same treatment hasn't been applied to the **vendor** detail page
+  (`components/vendors/PublicVendorDetailPage.tsx`), which has the same thin-description
+  and pill-row problem.
+
+### Follow-up (same day) — FAQ was silently empty on every real venue, plus a missed field
+
+Client asked for "more content like FAQ too" after the restructure above. Checked the
+data first: **every venue in MongoDB has an empty `faqs` array**, and the old FAQ section
+was gated on `venue.faqs.length > 0` — so it never rendered on a single live page, exactly
+the same gap the Facilities section had before this session.
+
+- **`lib/venue-faqs.ts`** — `mergeFaqs(venue)`: vendor-authored FAQs lead (none exist yet,
+  but the path is real), filled out with up to 6 questions derived from fields the venue
+  actually has — advance payment (the real 30% from `app/api/bookings/route.ts:30`),
+  capacity, catering, indoor/outdoor, parking, contact. Skips a derived question if the
+  vendor already asked something with the same text, so nothing repeats. No cancellation
+  or policy claims invented — we don't hold that data.
+- FAQ section now renders unconditionally, moved to sit between Good to Know and Reviews,
+  and added to the tab bar / scroll-spy (was missing from both, even when it did show).
+- **Found in passing:** `venue.type` (real data — "Luxury Hotel", "Banquet Hall", etc.,
+  confirmed present on every sampled venue) was captured by every form but never shown on
+  the detail page — the hero badge hardcoded the literal text "Venue & Estate" instead.
+  Fixed to `venue.type || "Venue & Estate"`, and added a "Venue type" row to the Property
+  Highlights panel in Overview.
+
+Verified: `tsc --noEmit` clean, no new lint errors (the two pre-existing `set-state-in-effect`
+errors on this file are unrelated, unchanged lines). Loaded `venue-ritz-1` live: tab bar now
+reads Overview/Areas/Facilities/Videos/Pricing/Good to Know/**FAQ**/Reviews, the hero badge
+reads "Luxury Hotel", and the FAQ section rendered 6 derived questions with no vendor data
+present. Confirmed the accordion opens (dispatched a real click event — a bare `.click()`
+call doesn't reliably trigger React's synthetic handler in this harness) and shows the
+correct 30%-advance answer text.

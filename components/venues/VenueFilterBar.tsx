@@ -31,19 +31,24 @@ interface Props {
 export default function VenueFilterBar({ activeCities, onCityChange, activeCategory, search, onSearchChange, searchPlaceholder }: Props) {
   const [localCities, setLocalCities] = useState<string[]>(activeCities || []);
   const [localSearch, setLocalSearch] = useState(search || "");
+  const [prevActiveCities, setPrevActiveCities] = useState(activeCities);
+  const [prevSearch, setPrevSearch] = useState(search);
+
+  if (activeCities !== prevActiveCities) {
+    setPrevActiveCities(activeCities);
+    setLocalCities(activeCities || []);
+  }
+
+  if (search !== prevSearch) {
+    setPrevSearch(search);
+    setLocalSearch(search || "");
+  }
+
   const [searchFocused, setSearchFocused] = useState(false);
   const { currency, setCurrency } = useCurrency();
   const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const filterContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setLocalCities(activeCities || []);
-  }, [activeCities]);
-
-  useEffect(() => {
-    setLocalSearch(search || "");
-  }, [search]);
 
   const noCitySelected = localCities.length === 0;
 

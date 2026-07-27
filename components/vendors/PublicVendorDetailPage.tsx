@@ -101,29 +101,20 @@ export default function PublicVendorDetailPage({ vendor: initialVendor }: Public
           }
         />
 
-        <div
-          id="photos"
-          className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 lg:gap-6 mt-6 mb-14 scroll-mt-28"
-        >
-          <VenueGallery
-            images={gallery}
-            venueName={vendor.businessName || vendor.name}
-            rating={vendor.rating || 0}
-            reviewCount={vendor.reviewCount || 0}
-          />
-          <VenueMapCard
-            name={vendor.businessName || vendor.name}
-            city={vendor.city}
-            mapLink={vendor.mapLink}
-          />
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 lg:gap-10 mt-6 items-start">
+          {/* Left — main content */}
+          <div className="space-y-10 min-w-0">
+            <div id="photos" className="scroll-mt-28">
+              <VenueGallery
+                images={gallery}
+                venueName={vendor.businessName || vendor.name}
+                rating={vendor.rating || 0}
+                reviewCount={vendor.reviewCount || 0}
+              />
+            </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-10">
-
-          {/* Left — main */}
-          <div className="space-y-10">
             {/* Tab Navigation */}
-            <div className="sticky top-20 z-40 bg-white py-4 -mx-4 px-4 sm:mx-0 sm:px-0 mt-6">
+            <div className="sticky top-20 z-40 bg-white py-4 -mx-4 px-4 sm:mx-0 sm:px-0">
               <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto no-scrollbar">
                 {[
                   { id: "about", label: "About" },
@@ -156,7 +147,7 @@ export default function PublicVendorDetailPage({ vendor: initialVendor }: Public
               </p>
             </section>
 
-            {/* Videos — the photographs now live in the collage at the top */}
+            {/* Videos */}
             <section id="videos" className="scroll-mt-32">
               <h2 className="text-2xl font-bold mb-5" style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}>
                 Videos
@@ -175,7 +166,6 @@ export default function PublicVendorDetailPage({ vendor: initialVendor }: Public
                 Pricing
               </h2>
               <div className="rounded-lg overflow-hidden border border-slate-200" style={{ background: "white" }}>
-
                 {isPerPlate ? (
                   <>
                     <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
@@ -269,8 +259,13 @@ export default function PublicVendorDetailPage({ vendor: initialVendor }: Public
             )}
           </div>
 
-          {/* Right — sidebar */}
-          <div>
+          {/* Right — sidebar: Map + Booking Form stacked continuously */}
+          <div className="lg:sticky lg:top-24 flex flex-col gap-6 w-full">
+            <VenueMapCard
+              name={vendor.businessName || vendor.name}
+              city={vendor.city}
+              mapLink={vendor.mapLink}
+            />
             <VendorSidebar vendor={vendor} />
           </div>
         </div>

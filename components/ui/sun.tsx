@@ -12,7 +12,7 @@ export interface SunIconHandle {
   stopAnimation: () => void;
 }
 
-interface SunIconProps extends HTMLAttributes<HTMLDivElement> {
+interface SunIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -42,7 +42,7 @@ const SunIcon = forwardRef<SunIconHandle, SunIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -53,7 +53,7 @@ const SunIcon = forwardRef<SunIconHandle, SunIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -63,7 +63,7 @@ const SunIcon = forwardRef<SunIconHandle, SunIconProps>(
       [controls, onMouseLeave]
     );
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -101,7 +101,7 @@ const SunIcon = forwardRef<SunIconHandle, SunIconProps>(
             />
           ))}
         </svg>
-      </div>
+      </span>
     );
   }
 );

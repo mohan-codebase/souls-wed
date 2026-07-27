@@ -1,5 +1,5 @@
 /**
- * 🎓 SESSION CONFIGURATION
+ * SESSION CONFIGURATION
  * 
  * This file configures "iron-session" — a library that ENCRYPTS and SIGNS
  * cookies so nobody can tamper with them.
@@ -57,5 +57,29 @@ export const sessionOptions: SessionOptions = {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     maxAge: 60 * 60 * 24 * 7, // 7 days
+  },
+};
+
+/**
+ * Holds the verified Google identity of a brand-new vendor between the
+ * OAuth callback and the "complete your business details" step — Vendor
+ * accounts need businessName/phone/category/city that Google can't supply,
+ * so we can't create the account in one shot like we do for Users.
+ */
+export interface PendingVendorSignupData {
+  googleId: string;
+  email: string;
+  name: string;
+  picture?: string;
+}
+
+export const pendingVendorSignupSessionOptions: SessionOptions = {
+  password: process.env.SESSION_SECRET as string,
+  cookieName: "soulswed-pending-vendor-signup",
+  cookieOptions: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 60 * 10, // 10 minutes — just long enough to fill in the form
   },
 };

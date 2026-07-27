@@ -14,6 +14,10 @@ import { CheckIcon } from "@/components/ui/check";
 import type { Venue } from "@/lib/venues-data";
 import VenueHero from "@/components/venues/VenueHero";
 import VenueGallery from "@/components/venues/VenueGallery";
+import VenueAbout from "@/components/venues/VenueAbout";
+import VenueFacilities from "@/components/venues/VenueFacilities";
+import VenueGoodToKnow from "@/components/venues/VenueGoodToKnow";
+import { mergeFaqs } from "@/lib/venue-faqs";
 import VenueSidebar from "@/components/venues/VenueSidebar";
 import VenueMapCard from "@/components/venues/VenueMapCard";
 import VenueReviews from "@/components/venues/VenueReviews";
@@ -33,11 +37,11 @@ export default function VenueDetailPage() {
   const [venueNotFound, setVenueNotFound] = useState(false);
 
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState("areas");
+  const [activeTab, setActiveTab] = useState("about");
 
   // Scroll-spy: track which section is in view
   useEffect(() => {
-    const sectionIds = ["areas", "about", "videos", "pricing", "reviews"];
+    const sectionIds = ["about", "areas", "facilities", "videos", "pricing", "good-to-know", "faq", "reviews"];
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -141,6 +145,8 @@ export default function VenueDetailPage() {
     notFound();
   }
 
+  const faqs = mergeFaqs(venue);
+
   return (
     <div className="min-h-screen" style={{ background: "var(--sw-white)" }}>
 
@@ -161,36 +167,30 @@ export default function VenueDetailPage() {
           }
         />
 
-        <div
-          id="photos"
-          className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 lg:gap-6 mt-6 mb-14 scroll-mt-28"
-        >
-          <VenueGallery
-            images={venue.gallery || []}
-            venueName={venue.name}
-            rating={venue.rating}
-            reviewCount={venue.reviewCount}
-            reviews={venue.reviews}
-          />
-          <VenueMapCard
-            name={venue.name}
-            city={venue.city}
-            location={venue.location}
-            mapLink={venue.mapLink}
-          />
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 lg:gap-10 mt-6 items-start">
+          {/* Left — main content */}
+          <div className="space-y-12 min-w-0">
+            <div id="photos" className="scroll-mt-28">
+              <VenueGallery
+                images={venue.gallery || []}
+                venueName={venue.name}
+                rating={venue.rating}
+                reviewCount={venue.reviewCount}
+                reviews={venue.reviews}
+              />
+            </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-10">
-          {/* Left — main */}
-          <div className="space-y-16">
             {/* Tab Navigation */}
-            <div className="sticky top-20 z-40 bg-white py-4 -mx-4 px-4 sm:mx-0 sm:px-0 mt-8">
+            <div className="sticky top-20 z-40 bg-white py-4 -mx-4 px-4 sm:mx-0 sm:px-0">
               <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto no-scrollbar">
                 {[
+                  { id: "about", label: "Overview" },
                   { id: "areas", label: "Areas Available" },
-                  { id: "about", label: "About" },
+                  { id: "facilities", label: "Facilities" },
                   { id: "videos", label: "Videos" },
                   { id: "pricing", label: "Pricing" },
+                  { id: "good-to-know", label: "Good to Know" },
+                  { id: "faq", label: "FAQ" },
                   { id: "reviews", label: "Reviews" },
                 ].map((tab) => (
                   <a
@@ -207,6 +207,23 @@ export default function VenueDetailPage() {
                 ))}
               </div>
             </div>
+
+            {/* About — description, property highlights and the popular
+                facilities strip, the way Booking.com opens a property page. */}
+            <section id="about" className="scroll-mt-32">
+              <h2
+                className="text-2xl font-bold mb-4"
+                style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}
+              >
+                About {venue.name}
+              </h2>
+              <VenueAbout
+                venue={venue}
+                onSeeAllFacilities={() =>
+                  document.getElementById("facilities")?.scrollIntoView({ behavior: "smooth" })
+                }
+              />
+            </section>
 
             {/* Areas Available */}
             <section id="areas" className="scroll-mt-32">
@@ -245,29 +262,18 @@ export default function VenueDetailPage() {
                 )}
               </div>
 
-              {/* Feature tags */}
-              <div className="flex flex-wrap gap-2 mt-5">
-                {venue.features.map((f) => (
-                  <span
-                    key={f}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-200 text-slate-600"
-                  >
-                    <CheckIcon className="w-3.5 h-3.5 text-green-500" />
-                    {f}
-                  </span>
-                ))}
-              </div>
             </section>
 
-            {/* About */}
-            <section id="about" className="scroll-mt-32">
+            {/* Facilities — the free-text feature list, sorted into headed
+                categories rather than shown as one undifferentiated pill row. */}
+            <section id="facilities" className="scroll-mt-32">
               <h2
-                className="text-2xl font-bold mb-4"
+                className="text-2xl font-bold mb-5"
                 style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}
               >
-                About {venue.name}
+                Facilities of {venue.name}
               </h2>
-              <p className="text-slate-600 leading-loose text-base font-medium max-w-4xl">{venue.description}</p>
+              <VenueFacilities venue={venue} />
             </section>
 
             {/* Videos — the photographs now live in the collage at the top */}
@@ -336,6 +342,55 @@ export default function VenueDetailPage() {
               )}
             </section>
 
+            {/* Good to know — our equivalent of Booking.com's house rules. */}
+            <section id="good-to-know" className="scroll-mt-32">
+              <h2
+                className="text-2xl font-bold mb-5"
+                style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}
+              >
+                Good to Know
+              </h2>
+              <VenueGoodToKnow venue={venue} />
+            </section>
+
+            {/* FAQ — vendor-authored questions lead, filled out with
+                questions derived from the venue's own data so the section
+                never sits empty (every vendor-entered `faqs` list is empty
+                today). */}
+            <section id="faq" className="scroll-mt-32">
+              <h2
+                className="text-2xl font-bold mb-5"
+                style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}
+              >
+                Frequently Asked Questions
+              </h2>
+              <div className="space-y-3">
+                {faqs.map((faq, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg overflow-hidden border border-slate-200"
+                    style={{ background: "white" }}
+                  >
+                    <button
+                      className="w-full flex items-center justify-between px-5 py-4 text-left gap-3"
+                      onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    >
+                      <span className="font-semibold text-sm text-slate-800">{faq.question}</span>
+                      <ChevronDownIcon
+                        className="w-4 h-4 flex-shrink-0 text-slate-400 transition-transform"
+                        style={{ transform: openFaq === i ? "rotate(180deg)" : "rotate(0)" }}
+                      />
+                    </button>
+                    {openFaq === i && (
+                      <div className="px-5 pb-4">
+                        <p className="text-sm text-slate-600 leading-relaxed">{faq.answer}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
             {/* Reviews */}
             <section id="reviews" className="scroll-mt-32">
               <h2
@@ -350,47 +405,16 @@ export default function VenueDetailPage() {
                 reviews={venue.reviews}
               />
             </section>
-
-            {/* FAQ */}
-            {venue.faqs.length > 0 && (
-              <section id="faq" className="scroll-mt-32">
-                <h2
-                  className="text-2xl font-bold mb-5"
-                  style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}
-                >
-                  Frequently Asked Questions
-                </h2>
-                <div className="space-y-3">
-                  {venue.faqs.map((faq, i) => (
-                    <div
-                      key={i}
-                      className="rounded-lg overflow-hidden border border-slate-200"
-                      style={{ background: "white" }}
-                    >
-                      <button
-                        className="w-full flex items-center justify-between px-5 py-4 text-left gap-3"
-                        onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                      >
-                        <span className="font-semibold text-sm text-slate-800">{faq.question}</span>
-                        <ChevronDownIcon
-                          className="w-4 h-4 flex-shrink-0 text-slate-400 transition-transform"
-                          style={{ transform: openFaq === i ? "rotate(180deg)" : "rotate(0)" }}
-                        />
-                      </button>
-                      {openFaq === i && (
-                        <div className="px-5 pb-4">
-                          <p className="text-sm text-slate-600 leading-relaxed">{faq.answer}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
 
-          {/* Right — sidebar (the map card sits beside the collage above) */}
-          <div className="flex flex-col gap-6">
+          {/* Right — sidebar: Map + Booking Form stacked continuously */}
+          <div className="lg:sticky lg:top-24 flex flex-col gap-6 w-full">
+            <VenueMapCard
+              name={venue.name}
+              city={venue.city}
+              location={venue.location}
+              mapLink={venue.mapLink}
+            />
             <VenueSidebar venue={venue} type={typeParam} />
           </div>
         </div>

@@ -12,7 +12,7 @@ export interface SmileIconHandle {
   stopAnimation: () => void;
 }
 
-interface SmileIconProps extends HTMLAttributes<HTMLDivElement> {
+interface SmileIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -33,7 +33,7 @@ const SmileIcon = forwardRef<SmileIconHandle, SmileIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (!isControlledRef.current) controls.start("animate");
         onMouseEnter?.(e);
       },
@@ -41,7 +41,7 @@ const SmileIcon = forwardRef<SmileIconHandle, SmileIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (!isControlledRef.current) controls.start("normal");
         onMouseLeave?.(e);
       },
@@ -110,7 +110,7 @@ const SmileIcon = forwardRef<SmileIconHandle, SmileIconProps>(
     };
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -157,7 +157,7 @@ const SmileIcon = forwardRef<SmileIconHandle, SmileIconProps>(
             y2="9"
           />
         </motion.svg>
-      </div>
+      </span>
     );
   }
 );

@@ -829,11 +829,11 @@ export default function VendorDashboard() {
       <div className="absolute w-[45rem] h-[45rem] -bottom-80 -right-80 opacity-[0.03] pointer-events-none rounded-full bg-amber-500 blur-[120px]" />
 
       {/* ─── FLOATING SIDEBAR (Desktop) ─── */}
-      <aside className={`hidden lg:flex flex-col border rounded-3xl m-3 h-[calc(100vh-2rem)] sticky top-4 shrink-0 z-30 shadow-none transition-all duration-300 ${sidebarClass} ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className={`hidden lg:flex flex-col border rounded-3xl m-3 h-[calc(100vh-2rem)] sticky top-4 shrink-0 z-30 shadow-none transition-all duration-300 overflow-hidden ${sidebarClass} ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         {/* Branding header with collapse button */}
-        <div className={`p-6 border-b flex items-center justify-between ${dividerClass}`}>
+        <div className={`p-6 border-b flex items-center justify-between min-h-[77px] ${dividerClass}`}>
           {!sidebarCollapsed ? (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 transition-all duration-300 overflow-hidden">
               <Link href="/">
                 <Image
                   src="/logo/logo-by-soulswed.png"
@@ -844,14 +844,14 @@ export default function VendorDashboard() {
                   priority
                 />
               </Link>
-              <p className="text-[9px] font-bold text-primary-600 uppercase tracking-widest mt-1">Partner Portal</p>
+              <p className="text-[9px] font-bold text-primary-600 uppercase tracking-widest mt-1 whitespace-nowrap">Partner Portal</p>
             </div>
           ) : (
-            <h2 className={`font-extrabold text-sm tracking-tight uppercase ${isDarkMode ? 'text-white' : 'text-stone-900'}`}>SW</h2>
+            <h2 className={`font-extrabold text-sm tracking-tight uppercase mx-auto ${isDarkMode ? 'text-white' : 'text-stone-900'}`}>SW</h2>
           )}
         </div>
 
-        <nav className="flex-1 px-4 py-6 flex flex-col gap-1.5 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
           {menuItems.map((item) => {
             const hasSubItems = item.subItems && item.subItems.length > 0;
             const isSubActive = hasSubItems && item.subItems.some((sub: any) => sub.id === activeTab);
@@ -879,18 +879,18 @@ export default function VendorDashboard() {
                     }`}
                   title={item.label}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Icon className="w-[18px] h-[18px] shrink-0" {...(Icon.displayName?.includes("Icon") || Icon.name?.includes("Icon") ? { isAnimating: isActive } : {})} />
-                    {!sidebarCollapsed && <span>{item.label}</span>}
+                    <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${sidebarCollapsed ? 'opacity-0 max-w-0' : 'opacity-100 max-w-[160px]'}`}>{item.label}</span>
                   </div>
                   {!sidebarCollapsed && item.count !== undefined && item.count !== null && !hasSubItems && (
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isActive ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500 border border-stone-200"
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black transition-opacity duration-300 whitespace-nowrap ${isActive ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500 border border-stone-200"
                       }`}>
                       {item.count}
                     </span>
                   )}
                   {!sidebarCollapsed && hasSubItems && (
-                    servicesExpanded ? <ChevronDownIcon className="w-4 h-4 opacity-70" /> : <ChevronRightIcon className="w-4 h-4 opacity-70" />
+                    servicesExpanded ? <ChevronDownIcon className="w-4 h-4 opacity-70 shrink-0" /> : <ChevronRightIcon className="w-4 h-4 opacity-70 shrink-0" />
                   )}
                   {sidebarCollapsed && item.count !== undefined && item.count !== null && !hasSubItems && (
                     <span className={`absolute right-1.5 top-1.5 px-1.5 py-0.5 rounded-full text-[8px] font-black ${isActive ? "bg-white text-primary-600" : "bg-stone-100 text-stone-500 border border-stone-200"
@@ -922,9 +922,9 @@ export default function VendorDashboard() {
                                 : "text-stone-500 hover:text-stone-900 hover:bg-stone-50"
                               }`}
                           >
-                            <div className="flex items-center gap-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
                               <SubIcon className="w-[15px] h-[15px] shrink-0" {...(SubIcon.displayName?.includes("Icon") || SubIcon.name?.includes("Icon") ? { isAnimating: isSubItemActive } : {})} />
-                              <span>{subItem.label}</span>
+                              <span className="whitespace-nowrap">{subItem.label}</span>
                             </div>
                             {subItem.count !== undefined && subItem.count !== null && (
                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isSubItemActive
@@ -959,7 +959,7 @@ export default function VendorDashboard() {
             <svg className="w-[18px] h-[18px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
             </svg>
-            {!sidebarCollapsed && <span>Hide sidebar</span>}
+            <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${sidebarCollapsed ? 'opacity-0 max-w-0' : 'opacity-100 max-w-[120px]'}`}>Hide sidebar</span>
           </button>
 
           <div className="my-1 border-t border-transparent" />
@@ -969,16 +969,14 @@ export default function VendorDashboard() {
               {vendor.profileImage ? (
                 <img src={vendor.profileImage} alt={vendor.businessName || vendor.name} className="w-8 h-8 shrink-0 rounded-full object-cover" />
               ) : (
-                <div className="w-8 h-8 shrink-0 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500 flex items-center justify-center">
+                <div className="w-8 h-8 shrink-0 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-500 flex items-center justify-center shrink-0">
                   <UserIcon className="w-4 h-4" />
                 </div>
               )}
-              {!sidebarCollapsed && (
-                <div className="min-w-0 flex-1 pr-2">
-                  <h4 className={`font-bold text-xs truncate ${headingText}`}>{vendor.businessName || vendor.name}</h4>
-                  <p className="text-[10px] font-medium text-stone-500 truncate">{vendor.email}</p>
-                </div>
-              )}
+              <div className={`min-w-0 flex-1 pr-2 transition-all duration-300 overflow-hidden ${sidebarCollapsed ? 'opacity-0 max-w-0 pointer-events-none hidden' : 'opacity-100 max-w-[140px]'}`}>
+                <h4 className={`font-bold text-xs truncate ${headingText}`}>{vendor.businessName || vendor.name}</h4>
+                <p className="text-[10px] font-medium text-stone-500 truncate">{vendor.email}</p>
+              </div>
             </div>
 
             <button

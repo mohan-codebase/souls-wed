@@ -1,5 +1,5 @@
 /**
- * 🎓 BOOKING CARD COMPONENT
+ * BOOKING CARD COMPONENT
  *
  * Displays a single booking in the user or vendor dashboard.
  * Includes Stripe payment integration for pending bookings.

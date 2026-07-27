@@ -12,7 +12,7 @@ export interface MenuIconHandle {
   stopAnimation: () => void;
 }
 
-interface MenuIconProps extends HTMLAttributes<HTMLDivElement> {
+interface MenuIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -52,7 +52,7 @@ const MenuIcon = forwardRef<MenuIconHandle, MenuIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -63,7 +63,7 @@ const MenuIcon = forwardRef<MenuIconHandle, MenuIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -73,7 +73,7 @@ const MenuIcon = forwardRef<MenuIconHandle, MenuIconProps>(
       [controls, onMouseLeave]
     );
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -119,7 +119,7 @@ const MenuIcon = forwardRef<MenuIconHandle, MenuIconProps>(
             y2="18"
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

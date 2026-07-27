@@ -59,6 +59,7 @@ export const venues: Venue[] = [
     reviewCount: 98,
     verified: true,
     featured: true,
+    contactPhone: "+91 98765 43210",
     image: "/images/venues/93e4edb0efd7ac902c480f49cdbf2697.webp",
     gallery: [
       "/images/venues/53234027fb9a7ac30ab05a227a7b4d90.webp",
@@ -98,6 +99,7 @@ export const venues: Venue[] = [
     reviewCount: 233,
     verified: true,
     featured: false,
+    contactPhone: "+91 98765 43211",
     image: "/images/venues/fef86b75f570fac8263f4e2b8bac059e.jpg",
     gallery: [
       "/images/venues/fef86b75f570fac8263f4e2b8bac059e.jpg",

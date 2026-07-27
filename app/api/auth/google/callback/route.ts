@@ -1,42 +1,52 @@
 /**
- * 🎓 GOOGLE OAUTH — STEP 2: HANDLE THE CALLBACK
+ * GOOGLE OAUTH — STEP 2: HANDLE THE CALLBACK
  *
  * Google redirects the browser back here with a one-time `code`. We:
  * 1. Verify `state` matches the cookie we set in step 1 (CSRF check).
  * 2. Exchange `code` for tokens, then fetch the user's Google profile.
- * 3. Find or create the matching User account (linking by email if one
- *    already exists), and log them in exactly like the password flow does.
+ * 3. For users: find or create the matching User account (linking by email
+ *    if one already exists), and log them in exactly like the password
+ *    flow does. For vendors: link/log in to an EXISTING vendor account
+ *    matched by email. If none exists and this was a signup attempt,
+ *    stash the verified Google identity in a short-lived cookie and send
+ *    them to fill in business details (city, category, business name)
+ *    that Google's profile can't supply — Vendor.create happens there.
  */
 
 import { connectDB } from "@/lib/mongodb";
 import { User } from "@/lib/models/User";
+import { Vendor } from "@/lib/models/Vendor";
 import { sendLoginNotificationEmail } from "@/lib/mail";
 import { describeDevice } from "@/lib/device";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
-import { SessionData, sessionOptions } from "@/lib/session";
+import { SessionData, sessionOptions, PendingVendorSignupData, pendingVendorSignupSessionOptions } from "@/lib/session";
 
-function failRedirect(req: NextRequest) {
-  return NextResponse.redirect(new URL("/login?error=google_auth_failed", req.url));
+function failRedirect(req: NextRequest, role: "user" | "vendor", error = "google_auth_failed") {
+  return NextResponse.redirect(new URL(`/login?role=${role}&error=${error}`, req.url));
 }
 
 export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
   const expectedState = cookieStore.get("google_oauth_state")?.value;
+  const role: "user" | "vendor" = cookieStore.get("google_oauth_role")?.value === "vendor" ? "vendor" : "user";
+  const intent: "signup" | "login" = cookieStore.get("google_oauth_intent")?.value === "signup" ? "signup" : "login";
   cookieStore.delete("google_oauth_state");
+  cookieStore.delete("google_oauth_role");
+  cookieStore.delete("google_oauth_intent");
 
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
 
   if (!code || !state || !expectedState || state !== expectedState) {
-    return failRedirect(req);
+    return failRedirect(req, role);
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return failRedirect(req);
+    return failRedirect(req, role);
   }
 
   try {
@@ -55,14 +65,14 @@ export async function GET(req: NextRequest) {
       }),
     });
 
-    if (!tokenRes.ok) return failRedirect(req);
+    if (!tokenRes.ok) return failRedirect(req, role);
     const tokens = await tokenRes.json();
 
     // ─── Fetch the user's Google profile ───
     const profileRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
-    if (!profileRes.ok) return failRedirect(req);
+    if (!profileRes.ok) return failRedirect(req, role);
 
     const profile = await profileRes.json() as {
       sub: string;
@@ -72,15 +82,59 @@ export async function GET(req: NextRequest) {
       picture?: string;
     };
 
-    if (!profile.email) return failRedirect(req);
+    if (!profile.email) return failRedirect(req, role);
 
     await connectDB();
+    const email = profile.email.toLowerCase().trim();
 
-    // ─── Find or create the User account ───
+    const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+    const userAgent = req.headers.get("user-agent") || "Unknown Device";
+
+    if (role === "vendor") {
+      // ─── Vendor: link/log in to an EXISTING account only ───
+      let vendor = await Vendor.findOne({ googleId: profile.sub });
+      if (!vendor) {
+        vendor = await Vendor.findOne({ email });
+        if (!vendor) {
+          if (intent === "signup") {
+            // Verified identity, but no account yet — collect business details before creating one.
+            const pending = await getIronSession<PendingVendorSignupData>(await cookies(), pendingVendorSignupSessionOptions);
+            pending.googleId = profile.sub;
+            pending.email = email;
+            pending.name = profile.name || email.split("@")[0];
+            pending.picture = profile.picture || "";
+            await pending.save();
+            return NextResponse.redirect(new URL("/signup/vendor-details", req.url));
+          }
+          // No matching vendor account — send them to sign up with full business details instead.
+          return failRedirect(req, "vendor", "google_no_vendor_account");
+        }
+        vendor.googleId = profile.sub;
+        if (!vendor.isEmailVerified) vendor.isEmailVerified = true;
+      }
+
+      session.userId = vendor._id.toString();
+      session.name = vendor.name;
+      session.email = vendor.email;
+      session.role = "vendor";
+      session.isLoggedIn = true;
+      await session.save();
+
+      vendor.lastLoginAt = new Date();
+      vendor.lastLoginDevice = describeDevice(userAgent);
+      vendor.lastLoginMethod = "google";
+      await vendor.save();
+
+      await sendLoginNotificationEmail(vendor.email, vendor.name, "vendor", userAgent);
+
+      return NextResponse.redirect(new URL("/vendor/dashboard", req.url));
+    }
+
+    // ─── User: find or create the account ───
     let user = await User.findOne({ googleId: profile.sub });
 
     if (!user) {
-      user = await User.findOne({ email: profile.email.toLowerCase().trim() });
+      user = await User.findOne({ email });
       if (user) {
         // Existing password-based account with the same email — link it.
         user.googleId = profile.sub;
@@ -88,8 +142,8 @@ export async function GET(req: NextRequest) {
       } else {
         user = new User({
           googleId: profile.sub,
-          name: profile.name || profile.email.split("@")[0],
-          email: profile.email.toLowerCase().trim(),
+          name: profile.name || email.split("@")[0],
+          email,
           isEmailVerified: true,
           profileImage: profile.picture || "",
         });
@@ -97,7 +151,6 @@ export async function GET(req: NextRequest) {
     }
 
     // ─── Create the same encrypted session cookie the password flow uses ───
-    const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
     session.userId = user._id.toString();
     session.name = user.name;
     session.email = user.email;
@@ -105,9 +158,9 @@ export async function GET(req: NextRequest) {
     session.isLoggedIn = true;
     await session.save();
 
-    const userAgent = req.headers.get("user-agent") || "Unknown Device";
     user.lastLoginAt = new Date();
     user.lastLoginDevice = describeDevice(userAgent);
+    user.lastLoginMethod = "google";
     await user.save();
 
     await sendLoginNotificationEmail(user.email, user.name, "user", userAgent);
@@ -115,6 +168,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   } catch (error: unknown) {
     console.error("Google OAuth callback error:", error);
-    return failRedirect(req);
+    return failRedirect(req, role);
   }
 }

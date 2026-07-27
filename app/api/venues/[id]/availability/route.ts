@@ -1,5 +1,5 @@
 /**
- * 🎓 AVAILABILITY API — GET /api/venues/[id]/availability
+ * AVAILABILITY API — GET /api/venues/[id]/availability
  * 
  * This API answers: "Which dates are already booked for this venue?"
  * 

@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { formatAsCurrency } from "@/lib/currency";
 import { Trash2 } from "lucide-react";
-import { Star, Flower2, ClipboardList, BedDouble, Building2, LayoutDashboard, BookOpen, Map, Camera, Brush, UtensilsCrossed, Utensils, Palette, Package, Briefcase, Save, Loader2, Wand2, LogOut, Shield, AlertCircle, SearchX, Mail, Smartphone, Monitor, Tablet } from "lucide-react";
+import { Star, Flower2, ClipboardList, BedDouble, Building2, LayoutDashboard, BookOpen, Map, Camera, Brush, UtensilsCrossed, Utensils, Palette, Package, Briefcase, Save, Loader2, Wand2, LogOut, Shield, AlertCircle, SearchX, Mail, Smartphone, Monitor, Tablet, KeyRound } from "lucide-react";
 import { UserIcon } from "@/components/ui/user";
 import { HomeIcon } from "@/components/ui/home";
 import { MapPinIcon } from "@/components/ui/map-pin";
@@ -664,11 +664,11 @@ export default function AdminDashboard() {
       <div className="absolute w-[45rem] h-[45rem] -bottom-80 -right-80 opacity-[0.03] pointer-events-none rounded-full bg-amber-500 blur-[150px]" />
 
       {/* ─── FLOATING SIDEBAR ─── */}
-      <aside className={`hidden lg:flex flex-col border rounded-3xl m-3 h-[calc(100vh-2rem)] sticky top-4 shrink-0 z-30 shadow-none transition-all duration-300 ${sidebarClass} ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className={`hidden lg:flex flex-col border rounded-3xl m-3 h-[calc(100vh-2rem)] sticky top-4 shrink-0 z-30 shadow-none transition-all duration-300 overflow-hidden ${sidebarClass} ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         {/* Branding header with collapse button */}
-        <div className={`p-6 border-b flex items-center justify-between ${dividerClass}`}>
+        <div className={`p-6 border-b flex items-center justify-between min-h-[77px] ${dividerClass}`}>
           {!sidebarCollapsed ? (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 transition-all duration-300 overflow-hidden">
               <Link href="/">
                 <Image
                   src="/logo/logo-by-soulswed.png"
@@ -679,15 +679,15 @@ export default function AdminDashboard() {
                   priority
                 />
               </Link>
-              <p className="text-[9px] font-bold text-primary-600 uppercase tracking-widest mt-1">Admin Control</p>
+              <p className="text-[9px] font-bold text-primary-600 uppercase tracking-widest mt-1 whitespace-nowrap">Admin Control</p>
             </div>
           ) : (
-            <h2 className={`font-extrabold text-sm tracking-tight uppercase ${isDarkMode ? 'text-white' : 'text-stone-900'}`}>SW</h2>
+            <h2 className={`font-extrabold text-sm tracking-tight uppercase mx-auto ${isDarkMode ? 'text-white' : 'text-stone-900'}`}>SW</h2>
           )}
         </div>
 
         {/* Navigation Link list */}
-        <nav className="flex-1 px-4 py-6 flex flex-col gap-1.5 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
           {menuItems.map((item) => {
             const hasSubItems = item.subItems && item.subItems.length > 0;
             const isSubActive = hasSubItems && item.subItems.some((sub: any) => sub.id === activeTab);
@@ -698,8 +698,8 @@ export default function AdminDashboard() {
 
             return (
               <div key={item.id} className="w-full">
-                {groupLabel && !sidebarCollapsed && (
-                  <p className="px-3.5 pt-3 pb-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-stone-400">{groupLabel}</p>
+                {groupLabel && (
+                  <p className={`px-3.5 pt-3 pb-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-stone-400 whitespace-nowrap transition-all duration-300 ${sidebarCollapsed ? 'opacity-0 max-h-0 py-0 overflow-hidden pointer-events-none' : 'opacity-100 max-h-10'}`}>{groupLabel}</p>
                 )}
                 <button
                   onClick={() => {
@@ -721,12 +721,12 @@ export default function AdminDashboard() {
                     }`}
                   title={item.label}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Icon className="w-[18px] h-[18px] shrink-0" {...(Icon.displayName?.includes("Icon") || Icon.name?.includes("Icon") ? { isAnimating: isActive } : {})} />
-                    {!sidebarCollapsed && <span>{item.label}</span>}
+                    <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${sidebarCollapsed ? 'opacity-0 max-w-0' : 'opacity-100 max-w-[160px]'}`}>{item.label}</span>
                   </div>
                   {!sidebarCollapsed && item.count !== undefined && item.count !== null && !hasSubItems && (
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isActive
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black transition-opacity duration-300 whitespace-nowrap ${isActive
                       ? "bg-white/20 text-white"
                       : isDarkMode
                         ? "bg-stone-800 text-stone-400 border border-stone-700"
@@ -736,7 +736,7 @@ export default function AdminDashboard() {
                     </span>
                   )}
                   {!sidebarCollapsed && hasSubItems && (
-                    servicesExpanded ? <ChevronDownIcon className="w-4 h-4 opacity-70" /> : <ChevronRightIcon className="w-4 h-4 opacity-70" />
+                    servicesExpanded ? <ChevronDownIcon className="w-4 h-4 opacity-70 shrink-0" /> : <ChevronRightIcon className="w-4 h-4 opacity-70 shrink-0" />
                   )}
                   {sidebarCollapsed && item.count !== undefined && item.count !== null && !hasSubItems && (
                     <span className={`absolute right-1.5 top-1.5 px-1.5 py-0.5 rounded-full text-[8px] font-black ${isActive
@@ -775,9 +775,9 @@ export default function AdminDashboard() {
                                 : "text-stone-500 hover:text-stone-900 hover:bg-stone-50"
                               }`}
                           >
-                            <div className="flex items-center gap-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
                               <SubIcon className="w-[15px] h-[15px] shrink-0" {...(SubIcon.displayName?.includes("Icon") || SubIcon.name?.includes("Icon") ? { isAnimating: isSubItemActive } : {})} />
-                              <span>{subItem.label}</span>
+                              <span className="whitespace-nowrap">{subItem.label}</span>
                             </div>
                             {subItem.count !== undefined && subItem.count !== null && (
                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${isSubItemActive
@@ -802,7 +802,7 @@ export default function AdminDashboard() {
 
         {/* Footer: promo-style approvals card + collapse/logout */}
         <div className="p-4 flex flex-col gap-2">
-          {!sidebarCollapsed && (
+          <div className={`transition-all duration-300 overflow-hidden ${sidebarCollapsed ? 'opacity-0 max-h-0 p-0 pointer-events-none' : 'opacity-100 max-h-64'}`}>
             <div className="relative overflow-hidden rounded-3xl bg-stone-900 p-5 text-white">
               <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-primary-500/30 blur-2xl pointer-events-none" />
               <div className="absolute -bottom-12 -left-8 w-28 h-28 rounded-full bg-amber-500/20 blur-2xl pointer-events-none" />
@@ -810,21 +810,21 @@ export default function AdminDashboard() {
                 <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center mb-3">
                   <SparklesIcon className="w-4 h-4 text-amber-300" />
                 </div>
-                <p className="font-extrabold text-sm">Approvals Queue</p>
+                <p className="font-extrabold text-sm whitespace-nowrap">Approvals Queue</p>
                 <p className="text-[10px] text-stone-400 font-semibold mt-1 leading-relaxed">
                   {pendingApprovals.length > 0
-                    ? `${pendingApprovals.length} vendor${pendingApprovals.length === 1 ? "" : "s"} awaiting your review`
+                    ? `${pendingApprovals.length} vendor${pendingApprovals.length === 1 ? "" : "s"} awaiting review`
                     : "All caught up — no pending vendors"}
                 </p>
                 <button
                   onClick={() => setActiveTab("approvals")}
-                  className="w-full mt-4 bg-primary-500 hover:bg-primary-600 text-white font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
+                  className="w-full mt-4 bg-primary-500 hover:bg-primary-600 text-white font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {pendingApprovals.length > 0 ? "Review now" : "Open queue"}
                 </button>
               </div>
             </div>
-          )}
+          </div>
 
           <div className={`flex items-center gap-2 ${sidebarCollapsed ? "flex-col" : "justify-between"}`}>
             <button
@@ -838,7 +838,7 @@ export default function AdminDashboard() {
               <svg className="w-[18px] h-[18px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
               </svg>
-              {!sidebarCollapsed && <span>Hide sidebar</span>}
+              <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${sidebarCollapsed ? 'opacity-0 max-w-0' : 'opacity-100 max-w-[120px]'}`}>Hide sidebar</span>
             </button>
 
             <button
@@ -1744,6 +1744,7 @@ export default function AdminDashboard() {
                                 <th className="p-4">Name</th>
                                 <th className="p-4">Email</th>
                                 <th className="p-4">Device</th>
+                                <th className="p-4">Login Method</th>
                                 <th className="p-4">Status</th>
                                 <th className="p-4">Last Login</th>
                               </tr>
@@ -1770,6 +1771,21 @@ export default function AdminDashboard() {
                                         <Monitor className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                                       )}
                                       {s.lastLoginDevice || "Unknown Device"}
+                                    </span>
+                                  </td>
+                                  <td className={`p-4 font-medium ${isDarkMode ? 'text-stone-300' : 'text-stone-700'}`}>
+                                    <span className="inline-flex items-center gap-1.5">
+                                      {s.lastLoginMethod === "google" ? (
+                                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                                        </svg>
+                                      ) : (
+                                        <KeyRound className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                                      )}
+                                      {s.lastLoginMethod === "google" ? "Google" : s.lastLoginMethod === "password" ? "Email/Password" : "Unknown"}
                                     </span>
                                   </td>
                                   <td className="p-4">

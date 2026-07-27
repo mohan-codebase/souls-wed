@@ -12,7 +12,7 @@ export interface CheckIconHandle {
   stopAnimation: () => void;
 }
 
-interface CheckIconProps extends HTMLAttributes<HTMLDivElement> {
+interface CheckIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -58,7 +58,7 @@ const CheckIcon = forwardRef<CheckIconHandle, CheckIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -69,7 +69,7 @@ const CheckIcon = forwardRef<CheckIconHandle, CheckIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -80,7 +80,7 @@ const CheckIcon = forwardRef<CheckIconHandle, CheckIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -105,7 +105,7 @@ const CheckIcon = forwardRef<CheckIconHandle, CheckIconProps>(
             variants={PATH_VARIANTS}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

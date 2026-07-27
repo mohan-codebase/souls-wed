@@ -1,5 +1,5 @@
 /**
- * 🎓 BOOKING DETAILS API — GET /api/bookings/[id]
+ * BOOKING DETAILS API — GET /api/bookings/[id]
  * 
  * Fetches details for a single booking and validates that the 
  * logged-in user is authorized to view it (either they created it

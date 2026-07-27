@@ -12,7 +12,7 @@ export interface HomeIconHandle {
   stopAnimation: () => void;
 }
 
-interface HomeIconProps extends HTMLAttributes<HTMLDivElement> {
+interface HomeIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -50,7 +50,7 @@ const HomeIcon = forwardRef<HomeIconHandle, HomeIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -61,7 +61,7 @@ const HomeIcon = forwardRef<HomeIconHandle, HomeIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -71,7 +71,7 @@ const HomeIcon = forwardRef<HomeIconHandle, HomeIconProps>(
       [controls, onMouseLeave]
     );
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -97,7 +97,7 @@ const HomeIcon = forwardRef<HomeIconHandle, HomeIconProps>(
             variants={PATH_VARIANTS}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

@@ -3,22 +3,11 @@
 import React, { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Camera, Trash2, Loader2 } from "lucide-react";
-import { SmileIcon } from "@/components/ui/smile";
 import { UploadIcon } from "@/components/ui/upload";
-import { XIcon } from "@/components/ui/x";
 import { CheckIcon } from "@/components/ui/check";
 
-// Curated emoji grid — popular profile-worthy emojis
-const EMOJI_OPTIONS = [
-  "😊", "😎", "🥰", "😍", "🤩", "😇", "🥳", "😄",
-  "💖", "💐", "🌹", "🌸", "✨", "💫", "⭐", "🔥",
-  "👰", "🤵", "💍", "🎊", "🎉", "🎀", "💝", "💕",
-  "🦋", "🌺", "🌷", "🍂", "🌙", "☀️", "🌈", "🎭",
-  "👑", "💎", "🏆", "🎵", "📸", "🎨", "🧿", "🪄",
-];
-
 interface AvatarUploaderProps {
-  /** Current profile image URL or emoji string */
+  /** Current profile image URL */
   currentImage: string;
   /** User's display name (for initial-letter fallback) */
   userName: string;
@@ -30,12 +19,6 @@ interface AvatarUploaderProps {
   accentColor?: string;
 }
 
-/** CheckIcon if the string is an emoji (non-URL, short string) */
-function isEmoji(str: string): boolean {
-  if (!str || str.startsWith("/") || str.startsWith("http")) return false;
-  return str.length <= 10;
-}
-
 export default function AvatarUploader({
   currentImage,
   userName,
@@ -44,7 +27,6 @@ export default function AvatarUploader({
   accentColor = "from-amber-500 to-primary-500",
 }: AvatarUploaderProps) {
   const [uploading, setUploading] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -55,7 +37,7 @@ export default function AvatarUploader({
     setSuccessMsg("");
   };
 
-  // ─── UploadIcon image file ───
+  // ─── Upload image file ───
   const handleFileUpload = useCallback(async (file: File) => {
     clearMessages();
 
@@ -87,34 +69,6 @@ export default function AvatarUploader({
         setTimeout(() => setSuccessMsg(""), 2500);
       } else {
         setError(data.message || "Upload failed.");
-      }
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setUploading(false);
-    }
-  }, [onAvatarChange]);
-
-  // ─── Select emoji ───
-  const handleEmojiSelect = useCallback(async (emoji: string) => {
-    clearMessages();
-    setUploading(true);
-    setShowEmojiPicker(false);
-
-    try {
-      const res = await fetch("/api/auth/settings/avatar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emoji }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        onAvatarChange(data.profileImage);
-        setSuccessMsg("Emoji avatar set!");
-        setTimeout(() => setSuccessMsg(""), 2500);
-      } else {
-        setError(data.message || "Failed to set emoji.");
       }
     } catch {
       setError("Network error. Please try again.");
@@ -175,15 +129,7 @@ export default function AvatarUploader({
       );
     }
 
-    if (currentImage && isEmoji(currentImage)) {
-      return (
-        <div className={`${size} rounded-full bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-700 flex items-center justify-center shadow-lg border-4 border-white dark:border-stone-900 text-4xl`}>
-          {currentImage}
-        </div>
-      );
-    }
-
-    if (currentImage && !isEmoji(currentImage)) {
+    if (currentImage && (currentImage.startsWith("/") || currentImage.startsWith("http") || currentImage.startsWith("data:"))) {
       return (
         <div className={`${size} rounded-full overflow-hidden shadow-lg border-4 border-white dark:border-stone-900`}>
           <img
@@ -259,20 +205,7 @@ export default function AvatarUploader({
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-bold bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors disabled:opacity-50"
         >
           <Camera className="w-3.5 h-3.5" />
-          UploadIcon Photo
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            clearMessages();
-            setShowEmojiPicker(!showEmojiPicker);
-          }}
-          disabled={uploading}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-bold bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors disabled:opacity-50"
-        >
-          <SmileIcon className="w-3.5 h-3.5" />
-          Emoji
+          Upload Photo
         </button>
 
         {currentImage && (
@@ -287,44 +220,6 @@ export default function AvatarUploader({
           </button>
         )}
       </div>
-
-      {/* Emoji picker dropdown */}
-      <AnimatePresence>
-        {showEmojiPicker && (
-          <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute top-full mt-2 z-50 bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl p-4 w-[280px]"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-stone-500 dark:text-stone-400 uppercase tracking-widest">
-                Pick an Emoji
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowEmojiPicker(false)}
-                className="p-1 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-              >
-                <XIcon className="w-3.5 h-3.5 text-stone-400" />
-              </button>
-            </div>
-            <div className="grid grid-cols-8 gap-1">
-              {EMOJI_OPTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => handleEmojiSelect(emoji)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-lg cursor-pointer hover:scale-125 active:scale-95 transition-transform"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Status messages */}
       <AnimatePresence>
@@ -352,8 +247,9 @@ export default function AvatarUploader({
       </AnimatePresence>
 
       <p className="text-[10px] text-stone-400 dark:text-stone-500 text-center max-w-[220px]">
-        Drag & drop, upload a photo, or pick an emoji. Max 5 MB.
+        Drag & drop or upload a photo. Max 5 MB.
       </p>
     </div>
   );
 }
+

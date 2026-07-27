@@ -12,7 +12,7 @@ export interface BellIconHandle {
   stopAnimation: () => void;
 }
 
-interface BellIconProps extends HTMLAttributes<HTMLDivElement> {
+interface BellIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -39,7 +39,7 @@ const BellIcon = forwardRef<BellIconHandle, BellIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -50,7 +50,7 @@ const BellIcon = forwardRef<BellIconHandle, BellIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -60,7 +60,7 @@ const BellIcon = forwardRef<BellIconHandle, BellIconProps>(
       [controls, onMouseLeave]
     );
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -87,7 +87,7 @@ const BellIcon = forwardRef<BellIconHandle, BellIconProps>(
           <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </motion.svg>
-      </div>
+      </span>
     );
   }
 );

@@ -11,7 +11,7 @@ export interface EyeIconHandle {
   stopAnimation: () => void;
 }
 
-interface EyeIconProps extends HTMLAttributes<HTMLDivElement> {
+interface EyeIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -32,7 +32,7 @@ const EyeIcon = forwardRef<EyeIconHandle, EyeIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -43,7 +43,7 @@ const EyeIcon = forwardRef<EyeIconHandle, EyeIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -54,7 +54,7 @@ const EyeIcon = forwardRef<EyeIconHandle, EyeIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -94,7 +94,7 @@ const EyeIcon = forwardRef<EyeIconHandle, EyeIconProps>(
             }}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

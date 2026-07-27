@@ -1,10 +1,9 @@
 /**
- * 🖼️ AVATAR UPDATE API — POST /api/auth/settings/avatar
+ * AVATAR UPDATE API — POST /api/auth/settings/avatar
  *
  * Allows any authenticated user (user, vendor, admin) to update
  * their profile avatar. Accepts either:
- *   - FormData with an image file (stored in public/uploads/)
- *   - JSON with { emoji: "😎" } for emoji-only avatars
+ *   - FormData with an image file
  *   - JSON with { profileImage: "" } to clear the avatar
  */
 
@@ -16,8 +15,6 @@ import { connectDB } from "@/lib/mongodb";
 import { User } from "@/lib/models/User";
 import { Vendor } from "@/lib/models/Vendor";
 import { Admin } from "@/lib/models/Admin";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -37,14 +34,11 @@ export async function POST(req: Request) {
     const contentType = req.headers.get("content-type") || "";
     let profileImage = "";
 
-    // ─── Handle JSON body (emoji or clear) ───
+    // ─── Handle JSON body (clear avatar) ───
     if (contentType.includes("application/json")) {
       const body = await req.json();
 
-      if (body.emoji && typeof body.emoji === "string") {
-        // Validate it's a reasonable emoji string (max 10 chars to allow compound emojis)
-        profileImage = body.emoji.trim().slice(0, 10);
-      } else if (body.profileImage !== undefined) {
+      if (body.profileImage !== undefined) {
         profileImage = typeof body.profileImage === "string" ? body.profileImage.trim().slice(0, 500) : "";
       } else {
         return NextResponse.json({ message: "Invalid request body." }, { status: 400 });

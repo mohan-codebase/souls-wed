@@ -1,5 +1,5 @@
 /**
- * 🎓 LOGOUT API — POST /api/auth/logout
+ * LOGOUT API — POST /api/auth/logout
  * 
  * Destroys the encrypted session cookie, effectively logging the user out.
  * 

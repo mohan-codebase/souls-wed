@@ -1,5 +1,5 @@
 /**
- * 🎓 BOOKING FORM COMPONENT
+ * BOOKING FORM COMPONENT
  * 
  * Generic Booking Widget supporting Venues and 12 Vendor Categories.
  */

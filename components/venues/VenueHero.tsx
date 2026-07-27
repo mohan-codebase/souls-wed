@@ -68,7 +68,7 @@ export default function VenueHero({ venue, photoCount, onReviewSubmitted }: Venu
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-[10px] font-bold uppercase tracking-wider bg-primary-100 text-primary-800 px-2.5 py-1 rounded-md">
-              Venue & Estate
+              {venue.type || "Venue & Estate"}
             </span>
             {venue.verified && (
               <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-white text-slate-800 border border-slate-200 px-2.5 py-1 rounded-md">
@@ -122,10 +122,28 @@ export default function VenueHero({ venue, photoCount, onReviewSubmitted }: Venu
             </div>
           )}
 
-          <a href={venue.contactPhone ? `tel:${venue.contactPhone}` : "#"} className="flex items-center justify-center gap-2 w-full md:w-auto bg-green-50 text-green-700 font-bold px-6 py-2.5 rounded-xl border border-green-200 hover:bg-green-100 transition-colors">
-            <PhoneIcon className="w-4 h-4" />
-            {venue.contactPhone ? venue.contactPhone : "Contact Venue"}
-          </a>
+          {venue.contactPhone ? (
+            <a
+              href={`tel:${venue.contactPhone}`}
+              className="flex items-center justify-center gap-2 w-full md:w-auto bg-green-50 text-green-700 font-bold px-6 py-2.5 rounded-xl border border-green-200 hover:bg-green-100 transition-colors"
+            >
+              <PhoneIcon className="w-4 h-4" />
+              {venue.contactPhone}
+            </a>
+          ) : (
+            <button
+              onClick={() => {
+                const el = document.getElementById("booking-section");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+              className="flex items-center justify-center gap-2 w-full md:w-auto bg-green-50 text-green-700 font-bold px-6 py-2.5 rounded-xl border border-green-200 hover:bg-green-100 transition-colors cursor-pointer"
+            >
+              <PhoneIcon className="w-4 h-4" />
+              Contact Venue
+            </button>
+          )}
         </div>
       </div>
 

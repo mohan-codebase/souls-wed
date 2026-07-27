@@ -22,20 +22,20 @@ export default function VenueMapCard({ name, city, location, mapLink }: VenueMap
 
   return (
     <div
-      className="rounded-lg border overflow-hidden h-full flex flex-col"
+      className="w-full rounded-2xl border overflow-hidden h-fit flex flex-col shadow-sm transition-all"
       style={{ borderColor: "var(--sw-light-gray)", background: "var(--sw-surface)" }}
     >
-      <div className="relative flex-1 min-h-[180px] w-full bg-slate-100">
+      <div className="relative h-[200px] w-full bg-slate-100 overflow-hidden rounded-t-2xl">
         <iframe
           src={embedSrc}
           title={`Map showing ${name}`}
-          className="absolute inset-0 w-full h-full border-0"
+          className="absolute inset-0 w-full h-full border-0 rounded-t-2xl"
           loading="lazy"
           referrerPolicy="no-referrer-when-downgrade"
         />
       </div>
 
-      <div className="p-4 flex items-start gap-2.5">
+      <div className="p-4 flex items-start gap-2.5 w-full">
         <MapPin className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "var(--sw-primary)" }} />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold leading-snug" style={{ color: "var(--sw-navy)" }}>
@@ -49,12 +49,12 @@ export default function VenueMapCard({ name, city, location, mapLink }: VenueMap
         </div>
       </div>
 
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 w-full">
         <a
           href={openHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="block w-full text-center px-4 py-2.5 rounded font-bold text-xs text-white transition-colors hover:brightness-95"
+          className="block w-full text-center px-4 py-2.5 rounded-xl font-bold text-xs text-white transition-all hover:brightness-95 active:scale-[0.99]"
           style={{ background: "var(--sw-primary)" }}
         >
           Show on map

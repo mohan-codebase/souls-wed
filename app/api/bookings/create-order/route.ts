@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
-import { convertINRTo } from "@/lib/currency";
+import { convertINRTo, formatAsCurrency } from "@/lib/currency";
 
 export async function POST(req: Request) {
   try {
@@ -61,28 +61,71 @@ export async function POST(req: Request) {
     const stripe = getStripe();
     const convertedAmount = convertINRTo(booking.advanceAmount, currency);
 
-    // Determine if the provider is a Venue or Vendor to set the correct redirect URL
+    // Determine if the provider is a Venue or Vendor to set the correct redirect URL.
+    // We also pull the image so Stripe Checkout can show the venue thumbnail.
     let returnUrlPath = "";
+    let venueImage: string | undefined;
     try {
-      const isVenue = await Venue.exists({
-        $or: [
-          { venueId: booking.providerId },
-          ...(booking.providerId.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: booking.providerId }] : [])
-        ]
-      });
-      returnUrlPath = isVenue ? `venues/${booking.providerId}` : `${booking.providerId}`;
+      const venue = await Venue.findOne(
+        {
+          $or: [
+            { venueId: booking.providerId },
+            ...(booking.providerId.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: booking.providerId }] : [])
+          ]
+        },
+        { image: 1 }
+      );
+      returnUrlPath = venue ? `venues/${booking.providerId}` : `vendor/${booking.providerId}`;
+      // Stripe only accepts publicly reachable absolute URLs
+      if (venue?.image?.startsWith("http")) venueImage = venue.image;
     } catch (e) {
-      returnUrlPath = `${booking.providerId}`; // fallback to vendor path
+      returnUrlPath = `vendor/${booking.providerId}`; // fallback to vendor path
     }
+
+    // ─── Build the customer-facing summary shown on the Stripe Checkout page ───
+    const fmtDate = (d: Date | string) =>
+      new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+
+    const eventDatesLabel = booking.eventDates?.length
+      ? `${booking.eventDates.map(fmtDate).join(", ")}, ${new Date(booking.eventDates[0]).getFullYear()}`
+      : booking.eventDate
+        ? new Date(booking.eventDate).toLocaleDateString("en-US", {
+            weekday: "short", month: "short", day: "numeric", year: "numeric",
+          })
+        : booking.checkIn && booking.checkOut
+          ? `${fmtDate(booking.checkIn)} — ${fmtDate(booking.checkOut)}`
+          : "";
+
+    // Stripe renders raw text, so casing has to be applied here (our own page uses CSS `capitalize`)
+    const titleCase = (s?: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
+
+    const remainingBalance = booking.totalAmount - booking.advanceAmount;
+    const summaryParts = [
+      eventDatesLabel && `Dates: ${eventDatesLabel}`,
+      booking.guestCount && `${booking.guestCount} guests`,
+      booking.roomCount && `${booking.roomCount} rooms`,
+      [titleCase(booking.functionType), titleCase(booking.functionTime)].filter(Boolean).join(" · "),
+      `Total ${formatAsCurrency(booking.totalAmount, currency)}`,
+      remainingBalance > 0 &&
+        `${formatAsCurrency(remainingBalance, currency)} balance payable at the venue`,
+    ].filter(Boolean);
+
+    const bookingRef = booking._id.toString().slice(-8).toUpperCase();
 
     const checkoutSession = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
+      // Prefills the email field so the customer doesn't retype it
+      customer_email: booking.userEmail,
+      // Lets us reconcile this session against the booking in the Stripe dashboard
+      client_reference_id: booking._id.toString(),
       line_items: [
         {
           price_data: {
             currency: currency.toLowerCase(),
             product_data: {
-              name: `Booking Advance for ${booking.providerName}`,
+              name: `${booking.bookingType === "room" ? "Room" : "Booking"} advance — ${booking.providerName}`,
+              description: summaryParts.join(" · "),
+              ...(venueImage ? { images: [venueImage] } : {}),
             },
             unit_amount: Math.round(convertedAmount * 100), // cents
           },
@@ -92,8 +135,29 @@ export async function POST(req: Request) {
       mode: "payment",
       success_url: `${origin}/${returnUrlPath}?success=true&session_id={CHECKOUT_SESSION_ID}&booking_id=${booking._id}`,
       cancel_url: `${origin}/${returnUrlPath}?canceled=true`,
+      payment_intent_data: {
+        description: `Advance for booking #${bookingRef} — ${booking.providerName}`,
+        receipt_email: booking.userEmail,
+        metadata: { bookingId: booking._id.toString(), bookingRef },
+      },
+      // Surfaced on the payment in the Stripe dashboard for support/reconciliation
       metadata: {
         bookingId: booking._id.toString(),
+        bookingRef,
+        bookingType: booking.bookingType,
+        provider: booking.providerName,
+        customerName: booking.userName,
+        customerEmail: booking.userEmail,
+        customerPhone: booking.userPhone || "",
+        eventDates: eventDatesLabel,
+        guestCount: booking.guestCount ? String(booking.guestCount) : "",
+        roomCount: booking.roomCount ? String(booking.roomCount) : "",
+        functionType: booking.functionType || "",
+        functionTime: booking.functionTime || "",
+        totalAmountINR: String(booking.totalAmount),
+        advanceAmountINR: String(booking.advanceAmount),
+        balanceDueINR: String(remainingBalance),
+        specialRequests: (booking.specialRequests || "").slice(0, 490),
       },
     });
 

@@ -12,7 +12,7 @@ export interface UsersIconHandle {
   stopAnimation: () => void;
 }
 
-interface UsersIconProps extends HTMLAttributes<HTMLDivElement> {
+interface UsersIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -54,7 +54,7 @@ const UsersIcon = forwardRef<UsersIconHandle, UsersIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -65,7 +65,7 @@ const UsersIcon = forwardRef<UsersIconHandle, UsersIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -76,7 +76,7 @@ const UsersIcon = forwardRef<UsersIconHandle, UsersIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -107,7 +107,7 @@ const UsersIcon = forwardRef<UsersIconHandle, UsersIconProps>(
             variants={PATH_VARIANTS}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

@@ -11,7 +11,7 @@ export interface BotIconHandle {
   stopAnimation: () => void;
 }
 
-interface BotIconProps extends HTMLAttributes<HTMLDivElement> {
+interface BotIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -33,7 +33,7 @@ const BotIcon = forwardRef<BotIconHandle, BotIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -44,7 +44,7 @@ const BotIcon = forwardRef<BotIconHandle, BotIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -55,7 +55,7 @@ const BotIcon = forwardRef<BotIconHandle, BotIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -116,7 +116,7 @@ const BotIcon = forwardRef<BotIconHandle, BotIconProps>(
             x2={9}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

@@ -1,5 +1,5 @@
 /**
- * 🎓 BOOKING MODEL
+ * BOOKING MODEL
  * 
  * This is the MongoDB schema for bookings. Think of it as a "blueprint"
  * that defines what a booking document looks like in the database.

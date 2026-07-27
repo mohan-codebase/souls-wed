@@ -12,7 +12,7 @@ export interface MessageCircleIconHandle {
   stopAnimation: () => void;
 }
 
-interface MessageCircleIconProps extends HTMLAttributes<HTMLDivElement> {
+interface MessageCircleIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -58,7 +58,7 @@ const MessageCircleIcon = forwardRef<
   });
 
   const handleMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseEnter?.(e);
       } else {
@@ -69,7 +69,7 @@ const MessageCircleIcon = forwardRef<
   );
 
   const handleMouseLeave = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseLeave?.(e);
       } else {
@@ -80,7 +80,7 @@ const MessageCircleIcon = forwardRef<
   );
 
   return (
-    <div
+    <span
       className={cn("inline-flex items-center justify-center")}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -102,7 +102,7 @@ const MessageCircleIcon = forwardRef<
       >
         <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
       </motion.svg>
-    </div>
+    </span>
   );
 });
 

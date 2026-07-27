@@ -13,6 +13,7 @@ const UserSchema = new Schema({
   resetPasswordExpires: { type: Date },
   lastLoginAt:  { type: Date },
   lastLoginDevice: { type: String },
+  lastLoginMethod: { type: String }, // "google" or "password"
   createdAt:    { type: Date, default: Date.now },
 });
 

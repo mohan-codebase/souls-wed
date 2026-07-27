@@ -1,5 +1,5 @@
 /**
- * 🎓 VENUE SIDEBAR — Updated with BookingForm
+ * VENUE SIDEBAR — Updated with BookingForm
  * 
  * BEFORE: Had a static enquiry form that didn't do anything
  * AFTER:  Integrates the real BookingForm with calendar + live pricing
@@ -43,66 +43,17 @@ export default function VenueSidebar({ venue, type }: VenueSidebarProps) {
     bookingTypes.push({ value: "venue", label: "Book Venue" });
   }
   return (
-    <div className="sticky top-24 flex flex-col gap-6">
-      
-      {/* Pricing Information Card */}
-      {(venue.pricePerPlateVeg || venue.pricePerPlateNonVeg || venue.rentalCost || venue.price) && (
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden p-6">
-          <h3 className="font-bold text-slate-900 mb-5 text-lg">Starting Price</h3>
-          
-          {(venue.pricePerPlateVeg || venue.pricePerPlateNonVeg) && (
-            <div className="flex flex-col gap-4">
-              {venue.pricePerPlateVeg && (
-                <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-                  <div>
-                    <span className="text-2xl font-bold text-slate-900">
-                      {convertPriceString(venue.pricePerPlateVeg, currency)}
-                    </span>
-                    <span className="text-xs text-slate-500 ml-1 font-medium">per plate</span>
-                  </div>
-                  <span className="text-xs font-bold tracking-widest uppercase text-slate-400">Veg</span>
-                </div>
-              )}
-              {venue.pricePerPlateNonVeg && (
-                <div className="flex items-center justify-between pb-2">
-                  <div>
-                    <span className="text-2xl font-bold text-slate-900">
-                      {convertPriceString(venue.pricePerPlateNonVeg, currency)}
-                    </span>
-                    <span className="text-xs text-slate-500 ml-1 font-medium">per plate</span>
-                  </div>
-                  <span className="text-xs font-bold tracking-widest uppercase text-slate-400">Non-Veg</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {(venue.rentalCost || venue.price) && (
-            <div className={`mt-4 ${venue.pricePerPlateVeg || venue.pricePerPlateNonVeg ? 'pt-4 border-t border-slate-200' : ''}`}>
-              <h3 className="font-bold text-slate-900 mb-3 text-lg">Venue Rental</h3>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold text-slate-900">
-                  {convertPriceString((venue.rentalCost || venue.price)!, currency)}
-                </span>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-slate-500">/day for {venue.rooms || 1} rooms</p>
-                  <p className="text-[10px] text-slate-400 font-medium">(incl. Rooms + Venue)</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+    <div className="flex flex-col gap-6">
 
       {/* ─── BOOKING FORM ─── */}
-      {/**
-       * 🎓 This is where the old static enquiry form used to be.
+      {/*
+       * This is where the old static enquiry form used to be.
        * Now it's a real interactive booking form with:
        * - Calendar date picker
        * - Live price calculation
        * - Booking creation API call
        */}
-      <div className="bg-white border border-slate-200 rounded-lg p-6">
+      <div id="booking-section" className="bg-white border border-slate-200 rounded-lg p-6 scroll-mt-28">
         <h3 className="font-bold text-slate-900 text-lg mb-5">
           Book {venue.name}
         </h3>

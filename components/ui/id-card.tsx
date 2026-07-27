@@ -12,7 +12,7 @@ export interface IdCardIconHandle {
   stopAnimation: () => void;
 }
 
-interface IdCardIconProps extends HTMLAttributes<HTMLDivElement> {
+interface IdCardIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -49,7 +49,7 @@ const IdCardIcon = forwardRef<IdCardIconHandle, IdCardIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -60,7 +60,7 @@ const IdCardIcon = forwardRef<IdCardIconHandle, IdCardIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -71,7 +71,7 @@ const IdCardIcon = forwardRef<IdCardIconHandle, IdCardIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -117,7 +117,7 @@ const IdCardIcon = forwardRef<IdCardIconHandle, IdCardIconProps>(
           />
           <rect height="14" rx="2" width="20" x="2" y="5" />
         </svg>
-      </div>
+      </span>
     );
   }
 );

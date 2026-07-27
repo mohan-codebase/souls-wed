@@ -12,7 +12,7 @@ export interface SlidersHorizontalIconHandle {
   stopAnimation: () => void;
 }
 
-interface SlidersHorizontalIconProps extends HTMLAttributes<HTMLDivElement> {
+interface SlidersHorizontalIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -43,7 +43,7 @@ const SlidersHorizontalIcon = forwardRef<
   });
 
   const handleMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseEnter?.(e);
       } else {
@@ -54,7 +54,7 @@ const SlidersHorizontalIcon = forwardRef<
   );
 
   const handleMouseLeave = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLSpanElement>) => {
       if (isControlledRef.current) {
         onMouseLeave?.(e);
       } else {
@@ -65,7 +65,7 @@ const SlidersHorizontalIcon = forwardRef<
   );
 
   return (
-    <div
+    <span
       className={cn("inline-flex items-center justify-center")}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -242,7 +242,7 @@ const SlidersHorizontalIcon = forwardRef<
           y2="22"
         />
       </svg>
-    </div>
+    </span>
   );
 });
 

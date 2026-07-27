@@ -101,6 +101,8 @@ function LoginContent() {
       setError("Google sign-in failed. Please try again or use your email and password.");
     } else if (oauthError === "google_not_configured") {
       setError("Google sign-in isn't available right now. Please use your email and password.");
+    } else if (oauthError === "google_no_vendor_account") {
+      setError("No vendor account found for that Google email. Please create an account first.");
     }
   }, [searchParams]);
 
@@ -461,9 +463,7 @@ function LoginContent() {
                       <button
                         type="button"
                         onClick={() =>
-                          role === "user"
-                            ? (window.location.href = "/api/auth/google")
-                            : alert("Google authentication coming soon!")
+                          (window.location.href = `/api/auth/google?role=${role}`)
                         }
                         className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-2.5 rounded-xl transition-colors text-sm shadow-sm cursor-pointer"
                       >

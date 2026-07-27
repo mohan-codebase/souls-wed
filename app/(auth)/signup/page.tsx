@@ -561,8 +561,7 @@ function SignupContent() {
                     )}
                   </button>
 
-                  {/* Google SSO (cosmetic) */}
-
+                  {/* Google SSO — user signs up directly; vendor verifies identity, then fills in business details */}
                   <div className="relative flex items-center py-1">
                     <div className="flex-grow border-t border-slate-200" />
                     <span className="flex-shrink-0 mx-4 text-slate-400 text-[11px] font-semibold uppercase tracking-wider">or</span>
@@ -571,9 +570,10 @@ function SignupContent() {
                   <button
                     type="button"
                     onClick={() =>
-                      role === "user"
-                        ? (window.location.href = "/api/auth/google")
-                        : alert("Google sign-up coming soon!")
+                      (window.location.href =
+                        role === "vendor"
+                          ? "/api/auth/google?role=vendor&intent=signup"
+                          : "/api/auth/google?role=user")
                     }
                     className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-2.5 rounded-2xl transition-colors text-sm shadow-sm cursor-pointer"
                   >
@@ -585,7 +585,6 @@ function SignupContent() {
                     </svg>
                     Continue with Google
                   </button>
-
 
                   {/* Already have an account */}
                   <p className="text-center text-slate-500 text-xs mt-1">

@@ -1,5 +1,5 @@
 /**
- * 🎓 LOGIN API ROUTE
+ * LOGIN API ROUTE
  * 
  * WHAT HAPPENS WHEN A USER LOGS IN:
  * 
@@ -114,6 +114,7 @@ export async function POST(req: Request) {
     if (role === "vendor" || role === "user") {
       user.lastLoginAt = new Date();
       user.lastLoginDevice = describeDevice(userAgent);
+      user.lastLoginMethod = "password";
       await user.save();
     }
 

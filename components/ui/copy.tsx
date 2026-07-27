@@ -12,7 +12,7 @@ export interface CopyIconHandle {
   stopAnimation: () => void;
 }
 
-interface CopyIconProps extends HTMLAttributes<HTMLDivElement> {
+interface CopyIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -41,7 +41,7 @@ const CopyIcon = forwardRef<CopyIconHandle, CopyIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -52,7 +52,7 @@ const CopyIcon = forwardRef<CopyIconHandle, CopyIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -62,7 +62,7 @@ const CopyIcon = forwardRef<CopyIconHandle, CopyIconProps>(
       [controls, onMouseLeave]
     );
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -104,7 +104,7 @@ const CopyIcon = forwardRef<CopyIconHandle, CopyIconProps>(
             }}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

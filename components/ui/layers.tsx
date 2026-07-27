@@ -12,7 +12,7 @@ export interface LayersIconHandle {
   stopAnimation: () => void;
 }
 
-interface LayersIconProps extends HTMLAttributes<HTMLDivElement> {
+interface LayersIconProps extends HTMLAttributes<HTMLSpanElement> {
   size?: number;
   isAnimating?: boolean;
   strokeWidth?: number | string;
@@ -44,7 +44,7 @@ const LayersIcon = forwardRef<LayersIconHandle, LayersIconProps>(
     });
 
     const handleMouseEnter = useCallback(
-      async (e: React.MouseEvent<HTMLDivElement>) => {
+      async (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
         } else {
@@ -56,7 +56,7 @@ const LayersIcon = forwardRef<LayersIconHandle, LayersIconProps>(
     );
 
     const handleMouseLeave = useCallback(
-      (e: React.MouseEvent<HTMLDivElement>) => {
+      (e: React.MouseEvent<HTMLSpanElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
         } else {
@@ -67,7 +67,7 @@ const LayersIcon = forwardRef<LayersIconHandle, LayersIconProps>(
     );
 
     return (
-      <div
+      <span
         className={cn("inline-flex items-center justify-center")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -107,7 +107,7 @@ const LayersIcon = forwardRef<LayersIconHandle, LayersIconProps>(
             }}
           />
         </svg>
-      </div>
+      </span>
     );
   }
 );

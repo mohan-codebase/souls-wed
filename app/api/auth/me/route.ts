@@ -1,5 +1,5 @@
 /**
- * 🎓 SESSION CHECK API — GET /api/auth/me
+ * SESSION CHECK API — GET /api/auth/me
  * 
  * This route answers the question: "Is the current user logged in, and who are they?"
  * 
