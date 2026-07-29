@@ -43,8 +43,6 @@ interface BookingCalendarProps {
   onRangeSelect?: (checkIn: string, checkOut: string) => void;
   /** Called when month changes — parent fetches new availability data */
   onMonthChange?: (yearMonth: string) => void;
-  /** Provider ID — used for fetching availability */
-  providerId: string;
   /** The currently selected date from the parent component (for single mode) */
   selectedDate?: string | null;
   /** The currently selected dates from the parent component (for multiple mode) */
@@ -115,7 +113,6 @@ export default function BookingCalendar({
   onDatesSelect,
   onRangeSelect,
   onMonthChange,
-  providerId,
   selectedDate: externalSelectedDate,
   selectedDates: externalSelectedDates,
   selectedRange: externalSelectedRange,

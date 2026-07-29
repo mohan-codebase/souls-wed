@@ -19,6 +19,7 @@ import { cities } from "@/lib/venues-data";
 import { useCurrency } from "@/lib/CurrencyContext";
 import { formatAsCurrency, CURRENCIES } from "@/lib/currency";
 import { VENDOR_CATEGORIES } from "@/lib/config/categories";
+import { GUEST_BANDS, BUDGET_BANDS, guestBandLabel, budgetBandLabel } from "@/lib/config/search";
 interface Props {
   activeCities: string[];
   onCityChange: (cities: string[]) => void;
@@ -26,9 +27,26 @@ interface Props {
   search?: string;
   onSearchChange?: (value: string) => void;
   searchPlaceholder?: string;
+  /** Wires the "Guests" chip to the real `?guests=` query param instead of decorative local state. */
+  guests?: number | null;
+  onGuestsChange?: (value: number | null) => void;
+  /** Wires the "Price Range" chip to the real `?budget=` query param instead of decorative local state. */
+  budget?: number | null;
+  onBudgetChange?: (value: number | null) => void;
 }
 
-export default function VenueFilterBar({ activeCities, onCityChange, activeCategory, search, onSearchChange, searchPlaceholder }: Props) {
+export default function VenueFilterBar({
+  activeCities,
+  onCityChange,
+  activeCategory,
+  search,
+  onSearchChange,
+  searchPlaceholder,
+  guests,
+  onGuestsChange,
+  budget,
+  onBudgetChange,
+}: Props) {
   const [localCities, setLocalCities] = useState<string[]>(activeCities || []);
   const [localSearch, setLocalSearch] = useState(search || "");
   const [prevActiveCities, setPrevActiveCities] = useState(activeCities);
@@ -88,6 +106,14 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // "Guests" and "Price Range" are real filters — wired to the `?guests=` and
+  // `?budget=` query params via the same bands the rest of the search pipeline
+  // uses (lib/config/search.ts) — when the parent passes a change handler.
+  // Without one they fall back to decorative local-only options, same as the
+  // still-unwired "Venue Type" / "Space" / "Features" chips.
+  const guestsWired = typeof onGuestsChange === "function";
+  const budgetWired = typeof onBudgetChange === "function";
+
   const filters = useMemo(() => {
     let priceOptions = ["Under ₹50,000", "₹50k–₹2L", "₹2L–₹5L", "₹5L+"];
     if (currency !== "INR") {
@@ -101,12 +127,15 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
       {
         label: "Guests",
         Icon: UsersIcon,
-        options: ["Up to 100", "100–300", "300–600", "600+"],
+        options: guestsWired ? GUEST_BANDS.map((b) => b.label) : ["Up to 100", "100–300", "300–600", "600+"],
       },
       {
         label: "Price Range",
         Icon: Coins,
-        options: priceOptions,
+        // Budget bands are always INR — `priceFrom` is stored in INR and every
+        // other budget chip in the app (VenuesDirectory, PublicVendorDirectory)
+        // already renders it that way regardless of display currency.
+        options: budgetWired ? BUDGET_BANDS.map((b) => b.label) : priceOptions,
       },
       {
         label: "Venue Type",
@@ -124,24 +153,45 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
         options: ["In-house Catering", "Parking", "Bridal Suite", "Overnight Stay"],
       },
     ];
-  }, [currency]);
+  }, [currency, guestsWired, budgetWired]);
 
   const toggleFilter = (label: string) =>
     setOpenFilter(openFilter === label ? null : label);
 
   const selectOption = (filterLabel: string, option: string) => {
+    if (filterLabel === "Guests" && guestsWired) {
+      onGuestsChange?.(GUEST_BANDS.find((b) => b.label === option)?.value ?? null);
+      setOpenFilter(null);
+      return;
+    }
+    if (filterLabel === "Price Range" && budgetWired) {
+      onBudgetChange?.(BUDGET_BANDS.find((b) => b.label === option)?.value ?? null);
+      setOpenFilter(null);
+      return;
+    }
     setActiveFilters((prev) => ({ ...prev, [filterLabel]: option }));
     setOpenFilter(null);
   };
 
   const clearFilter = (filterLabel: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (filterLabel === "Guests" && guestsWired) {
+      onGuestsChange?.(null);
+      return;
+    }
+    if (filterLabel === "Price Range" && budgetWired) {
+      onBudgetChange?.(null);
+      return;
+    }
     const next = { ...activeFilters };
     delete next[filterLabel];
     setActiveFilters(next);
   };
 
-  const activeCount = Object.keys(activeFilters).length;
+  const activeCount =
+    Object.keys(activeFilters).length +
+    (guestsWired && guests ? 1 : 0) +
+    (budgetWired && budget ? 1 : 0);
 
 
   return (
@@ -186,7 +236,14 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
         {/* Filter chips */}
         <div className="flex items-center justify-center gap-2 flex-wrap" style={{ scrollbarWidth: "none" }}>
           {filters.map((f) => {
-            const isActive = !!activeFilters[f.label];
+            const isGuestsFilter = f.label === "Guests" && guestsWired;
+            const isBudgetFilter = f.label === "Price Range" && budgetWired;
+            const wiredLabel = isGuestsFilter
+              ? guestBandLabel(guests ?? null)
+              : isBudgetFilter
+                ? budgetBandLabel(budget ?? null)
+                : null;
+            const isActive = isGuestsFilter || isBudgetFilter ? wiredLabel !== null : !!activeFilters[f.label];
             const isOpen = openFilter === f.label;
             const { Icon } = f;
 
@@ -214,7 +271,7 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
                     className="w-3.5 h-3.5 flex-shrink-0"
                     style={{ opacity: isActive ? 1 : 0.6 }}
                   />
-                  <span>{isActive ? activeFilters[f.label] : f.label}</span>
+                  <span>{isActive ? (wiredLabel ?? activeFilters[f.label]) : f.label}</span>
                   {isActive ? (
                     <motion.span
                       initial={{ scale: 0 }}
@@ -248,9 +305,9 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
                       transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                       className="absolute top-full left-0 mt-3 w-64 rounded-3xl z-50 overflow-hidden"
                       style={{
-                        background: "rgba(255,255,255,0.98)",
-                        backdropFilter: "blur(20px)",
+                        background: "var(--sw-nav-solid)",
                         border: "1px solid rgba(0,0,0,0.1)",
+                        boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
                       }}
                     >
                       {/* Dropdown header */}
@@ -266,7 +323,8 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
 
                       <div className="py-2">
                         {f.options.map((opt) => {
-                          const isSelected = activeFilters[f.label] === opt;
+                          const isSelected =
+                            isGuestsFilter || isBudgetFilter ? wiredLabel === opt : activeFilters[f.label] === opt;
                           return (
                             <button
                               key={opt}
@@ -303,7 +361,11 @@ export default function VenueFilterBar({ activeCities, onCityChange, activeCateg
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                onClick={() => setActiveFilters({})}
+                onClick={() => {
+                  setActiveFilters({});
+                  if (guestsWired) onGuestsChange?.(null);
+                  if (budgetWired) onBudgetChange?.(null);
+                }}
                 className="flex-shrink-0 text-xs font-bold underline underline-offset-4 transition-colors cursor-pointer ml-2"
                 style={{ color: "var(--sw-navy)", opacity: 0.6 }}
               >

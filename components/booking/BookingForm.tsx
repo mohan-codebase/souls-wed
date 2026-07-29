@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { formatAsCurrency, CURRENCIES } from "@/lib/currency";
-import { BedDouble, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { BedDouble, Loader2, AlertCircle, CheckCircle2, Clock, User } from "lucide-react";
 import { UsersIcon } from "@/components/ui/users";
 import { CalendarDaysIcon } from "@/components/ui/calendar-days";
 import { IndianRupeeIcon } from "@/components/ui/indian-rupee";
@@ -89,6 +89,7 @@ export default function BookingForm({
   const [menuType, setMenuType] = useState<"veg" | "nonveg">("veg");
   const [functionType, setFunctionType] = useState("wedding");
   const [functionTime, setFunctionTime] = useState("evening");
+  const [userName, setUserName] = useState("");
   const [phone, setPhone] = useState("");
   const [specialRequests, setSpecialRequests] = useState("");
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(true);
@@ -101,7 +102,13 @@ export default function BookingForm({
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((data) => setIsLoggedIn(data.authenticated === true))
+      .then((data) => {
+        setIsLoggedIn(data.authenticated === true);
+        if (data.authenticated && data.user) {
+          if (data.user.name) setUserName(data.user.name);
+          if (data.user.phone) setPhone(data.user.phone);
+        }
+      })
       .catch(() => setIsLoggedIn(false));
   }, []);
 
@@ -197,6 +204,15 @@ export default function BookingForm({
       return;
     }
 
+    if (!userName.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (!phone || phone.trim().length < 7) {
+      setError("Please enter a valid contact phone number.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -219,6 +235,7 @@ export default function BookingForm({
           functionTime,
           specialRequests,
           notifyWhatsapp,
+          userName: userName.trim(),
           userPhone: phone,
         }),
       });
@@ -297,7 +314,6 @@ export default function BookingForm({
         <BookingCalendar
           mode={bookingType === "room" ? "range" : "multiple"}
           bookedDates={bookedDates}
-          providerId={providerId}
           selectedDates={selectedDates}
           onDatesSelect={(dates) => setSelectedDates(dates)}
           onRangeSelect={(ci, co) => {
@@ -376,15 +392,31 @@ export default function BookingForm({
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
-          <PhoneIcon className="w-3.5 h-3.5 text-primary-500" /> Contact PhoneIcon
-        </label>
-        <PhoneInput
-          placeholder="Enter contact number"
-          value={phone}
-          onChange={setPhone}
-        />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
+            <User className="w-3.5 h-3.5 text-primary-500" /> Full Name
+          </label>
+          <input
+            type="text"
+            placeholder="Enter full name"
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-base md:text-sm outline-none focus:border-primary-400 transition-colors"
+            required
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
+            <PhoneIcon className="w-3.5 h-3.5 text-primary-500" /> Contact Number
+          </label>
+          <PhoneInput
+            placeholder="Enter contact number"
+            value={phone}
+            onChange={setPhone}
+          />
+        </div>
       </div>
 
       <div className="bg-primary-50/50 border border-primary-100 rounded-2xl p-4 mt-2">

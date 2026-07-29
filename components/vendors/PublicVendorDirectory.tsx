@@ -3,7 +3,7 @@
 import Image from "@/components/shared/CustomImage";
 import Link from "next/link";
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, BadgeCheck, List, Loader2, Crown } from "lucide-react";
 import { SearchIcon } from "@/components/ui/search";
@@ -22,6 +22,13 @@ import VenueFilterBar from "@/components/venues/VenueFilterBar";
 import ListingCard, { CardTag } from "@/components/shared/ListingCard";
 import VendorCard from "@/components/vendors/VendorCard";
 import WeddingCategoriesSection from "@/components/home/WeddingCategoriesSection";
+import {
+  budgetBandLabel,
+  categoryBySlug,
+  commerceModel,
+  guestBandLabel,
+  type SearchQuery,
+} from "@/lib/config/search";
 
 export interface PublicVendorReview {
   id: number;
@@ -39,6 +46,7 @@ export interface PublicVendor {
   name: string;
   category: string;
   city: string;
+  country?: string;
   description?: string;
   rating?: number;
   reviewCount?: number;
@@ -71,25 +79,73 @@ const fallbackImages = [
 ];
 
 // ── Category-specific hero config ──
-const categoryMeta: Record<string, { eyebrow: string; titlePrefix: string; titleAccent: string; subtitle: string }> = {
+interface CategoryMeta {
+  eyebrow: string;
+  titlePrefix: string;
+  titleAccent: string;
+  subtitle: string;
+}
+
+const categoryMeta: Record<string, CategoryMeta> = {
   Venues: { eyebrow: "Explore Dream Venues", titlePrefix: "Wedding", titleAccent: "Venues", subtitle: "Discover extraordinary spaces — from regal palaces to serene backwater resorts — curated for your perfect celebration." },
   Rooms: { eyebrow: "Premium Accommodation", titlePrefix: "Wedding", titleAccent: "Rooms", subtitle: "Luxury rooms and suites for your guests — from boutique stays to grand resorts." },
   Planners: { eyebrow: "Expert Event Planning", titlePrefix: "Wedding", titleAccent: "Planners", subtitle: "From intimate ceremonies to grand celebrations — let experts handle every detail." },
   Caterers: { eyebrow: "Exquisite Cuisine", titlePrefix: "Wedding", titleAccent: "Caterers", subtitle: "Multi-cuisine catering with live counters, customized menus, and premium service." },
   Decorators: { eyebrow: "Stunning Decor", titlePrefix: "Wedding", titleAccent: "Decorators", subtitle: "Transform your venue with breathtaking floral installations, lighting, and mandap designs." },
+  Photographers: { eyebrow: "Capture Timeless Moments", titlePrefix: "Wedding", titleAccent: "Photographers", subtitle: "Top-tier wedding photographers and videographers to capture every emotion of your special day." },
+  Photography: { eyebrow: "Capture Timeless Moments", titlePrefix: "Wedding", titleAccent: "Photographers", subtitle: "Top-tier wedding photographers and videographers to capture every emotion of your special day." },
 };
+
+/**
+ * Hero copy for the 30-odd categories that have no hand-written entry above,
+ * built from the category config so a new category never lands on a generic
+ * "Wedding Vendors" heading.
+ */
+function derivedMeta(slug: string | undefined): CategoryMeta | null {
+  const config = categoryBySlug(slug);
+  if (!config) return null;
+
+  const model = commerceModel(config);
+  const name = config.name;
+  const lower = name.toLowerCase();
+
+  return {
+    eyebrow: config.tagline,
+    // "Wedding Wedding Planners" would be silly.
+    titlePrefix: /^wedding/i.test(name) ? "" : "Wedding",
+    titleAccent: /^wedding\s+/i.test(name) ? name.replace(/^wedding\s+/i, "") : name,
+    subtitle:
+      model === "shop"
+        ? `Browse ${lower} from admin-verified sellers — compare pricing and order online.`
+        : model === "appointment"
+          ? `Book appointments with verified ${lower} — compare pricing, reviews and availability.`
+          : `Compare admin-verified ${lower} — check live availability and pricing, then book securely.`,
+  };
+}
 
 export default function PublicVendorDirectory({
   vendors,
   activeCategory,
+  categorySlug,
+  initialQuery,
 }: {
   vendors: PublicVendor[];
   activeCategory?: string;
+  /** Slug from the URL, used to derive hero copy for uncurated categories. */
+  categorySlug?: string;
+  /**
+   * Filters already applied on the server (guests, dates, budget cannot be
+   * re-derived on the client, so they are shown as chips that clear by
+   * navigating).
+   */
+  initialQuery?: SearchQuery;
 }) {
   const searchParams = useSearchParams();
-  const initialCity = searchParams?.get("city");
+  const router = useRouter();
+  const pathname = usePathname();
+  const initialCity = initialQuery?.city ?? searchParams?.get("city") ?? null;
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQuery?.q ?? "");
   const [activeCities, setActiveCities] = useState<string[]>(initialCity ? [initialCity] : []);
   const [sort, setSort] = useState("Recommended");
   const [sortOpen, setSortOpen] = useState(false);
@@ -97,12 +153,14 @@ export default function PublicVendorDirectory({
   const [visibleCount, setVisibleCount] = useState(9);
   const [isLoading, setIsLoading] = useState(false);
 
-  const meta = categoryMeta[activeCategory || ""] || {
-    eyebrow: "Approved Partner Directory",
-    titlePrefix: "Wedding",
-    titleAccent: "Vendors",
-    subtitle: "Browse vendor profiles that have passed admin verification and are currently accepting enquiries.",
-  };
+  const meta: CategoryMeta = categoryMeta[activeCategory || ""] ??
+    derivedMeta(categorySlug) ?? {
+      eyebrow: "Approved Partner Directory",
+      titlePrefix: "Wedding",
+      titleAccent: "Vendors",
+      subtitle:
+        "Browse vendor profiles that have passed admin verification and are currently accepting enquiries.",
+    };
 
   const filtered = useMemo(() => {
     let list = [...vendors];
@@ -150,11 +208,88 @@ export default function PublicVendorDirectory({
     }, 400);
   };
 
+  /**
+   * Guests, dates and budget are applied by the server query, so clearing them
+   * means dropping the param and re-fetching rather than touching local state.
+   */
+  const dropParams = (...keys: string[]) => {
+    const next = new URLSearchParams(searchParams?.toString() ?? "");
+    keys.forEach((key) => next.delete(key));
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  };
+
+  const setParam = (key: string, value: string | number | null) => {
+    const next = new URLSearchParams(searchParams?.toString() ?? "");
+    if (value) next.set(key, String(value));
+    else next.delete(key);
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  };
+
+  /**
+   * Keeps the URL's `?city=` in sync with the destination circles, matching
+   * Guests/Price Range — city selection was previously local-only state, so a
+   * selection wasn't bookmarkable/shareable and didn't survive a refresh. The
+   * URL contract only carries a single city, so a multi-select (more than one
+   * circle at once) is left out of the URL; the client-side filter below
+   * still honors every selected city either way.
+   */
+  const handleCityChange = (cities: string[]) => {
+    setActiveCities(cities);
+    if (cities.length === 1) setParam("city", cities[0]);
+    else if (cities.length === 0) setParam("city", null);
+  };
+
+  const hasActiveSearch = useMemo(() => {
+    return Boolean(
+      initialQuery?.city ||
+      initialQuery?.guests ||
+      initialQuery?.start ||
+      initialQuery?.end ||
+      initialQuery?.budget ||
+      initialQuery?.q ||
+      search.trim() ||
+      activeCities.length > 0
+    );
+  }, [initialQuery, search, activeCities]);
+
+  useEffect(() => {
+    if (hasActiveSearch) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [hasActiveSearch]);
+
   const activeFilters: { label: string; onRemove: () => void }[] = [];
   if (search.trim()) activeFilters.push({ label: `"${search}"`, onRemove: () => setSearch("") });
   if (activeCities.length > 0) {
     activeCities.forEach((city) => {
-      activeFilters.push({ label: city, onRemove: () => setActiveCities((prev) => prev.filter((c) => c !== city)) });
+      activeFilters.push({
+        label: city,
+        onRemove: () => {
+          setActiveCities((prev) => prev.filter((c) => c !== city));
+          if (initialQuery?.city === city) dropParams("city");
+        },
+      });
+    });
+  }
+  if (initialQuery?.guests) {
+    activeFilters.push({
+      label: guestBandLabel(initialQuery.guests) ?? `${initialQuery.guests} guests`,
+      onRemove: () => dropParams("guests"),
+    });
+  }
+  if (initialQuery?.start) {
+    const { start, end } = initialQuery;
+    activeFilters.push({
+      label: end && end !== start ? `${start} → ${end}` : start,
+      onRemove: () => dropParams("start", "end"),
+    });
+  }
+  if (initialQuery?.budget) {
+    activeFilters.push({
+      label: budgetBandLabel(initialQuery.budget) ?? `Under ₹${initialQuery.budget.toLocaleString("en-IN")}`,
+      onRemove: () => dropParams("budget"),
     });
   }
   if (sort !== "Recommended") activeFilters.push({ label: sort, onRemove: () => setSort("Recommended") });
@@ -162,95 +297,105 @@ export default function PublicVendorDirectory({
   return (
     <div className="min-h-screen" style={{ background: "var(--sw-white)" }}>
 
-      {/* ══════════════════════ HERO ══════════════════════ */}
-      <div className="pt-28 pb-4 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div
-          className="relative overflow-hidden pt-16 pb-16 px-4 text-center rounded-[40px] shadow-sm border border-primary-50/60"
-          style={{
-            background: "var(--sw-hero-gradient)",
-          }}
-        >
-          {/* Floating orbs */}
-          <div
-            className="absolute -top-16 -left-16 w-80 h-80 rounded-full pointer-events-none"
-            style={{
-              background: "radial-gradient(circle, rgba(238,116,41,0.18) 0%, transparent 70%)",
-              filter: "blur(40px)",
-              animation: "orb-float 9s ease-in-out infinite",
-            }}
-          />
-          <div
-            className="absolute top-10 -right-20 w-96 h-96 rounded-full pointer-events-none"
-            style={{
-              background: "radial-gradient(circle, rgba(252,203,17,0.2) 0%, transparent 70%)",
-              filter: "blur(48px)",
-              animation: "orb-float 12s ease-in-out infinite reverse",
-            }}
-          />
-          <div
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-40 rounded-full pointer-events-none"
-            style={{
-              background: "radial-gradient(ellipse, rgba(238,116,41,0.08) 0%, transparent 70%)",
-              filter: "blur(30px)",
-            }}
-          />
-
-          <motion.div
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="relative z-10"
-          >
-            {/* Eyebrow pill */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5 text-xs font-bold uppercase tracking-widest"
+      {/* ══════════════════════ HERO & CATEGORIES (Only show when not actively searching/filtering) ══════════════════════ */}
+      {!hasActiveSearch ? (
+        <>
+          <div className="pt-28 pb-4 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            <div
+              className="relative overflow-hidden pt-16 pb-16 px-4 text-center rounded-[40px] shadow-sm border border-primary-50/60"
               style={{
-                background: "rgba(238,116,41,0.12)",
-                color: "var(--sw-primary)",
-                border: "1px solid rgba(238,116,41,0.25)",
+                background: "var(--sw-hero-gradient)",
               }}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
-              {meta.eyebrow}
-            </div>
-
-            <h1
-              className="text-5xl sm:text-6xl md:text-7xl font-bold mb-5 leading-[1.1]"
-              style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}
-            >
-              {meta.titlePrefix}{" "}
-              <span
-                className="relative inline-block"
+              {/* Floating orbs */}
+              <div
+                className="absolute -top-16 -left-16 w-80 h-80 rounded-full pointer-events-none"
                 style={{
-                  background: "linear-gradient(135deg, var(--sw-primary) 0%, #f5a623 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
+                  background: "radial-gradient(circle, rgba(238,116,41,0.18) 0%, transparent 70%)",
+                  filter: "blur(40px)",
+                  animation: "orb-float 9s ease-in-out infinite",
                 }}
+              />
+              <div
+                className="absolute top-10 -right-20 w-96 h-96 rounded-full pointer-events-none"
+                style={{
+                  background: "radial-gradient(circle, rgba(252,203,17,0.2) 0%, transparent 70%)",
+                  filter: "blur(48px)",
+                  animation: "orb-float 12s ease-in-out infinite reverse",
+                }}
+              />
+              <div
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-40 rounded-full pointer-events-none"
+                style={{
+                  background: "radial-gradient(ellipse, rgba(238,116,41,0.08) 0%, transparent 70%)",
+                  filter: "blur(30px)",
+                }}
+              />
+
+              <motion.div
+                initial={{ opacity: 0, y: 28 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                className="relative z-10"
               >
-                {meta.titleAccent}
-              </span>
-            </h1>
+                {/* Eyebrow pill */}
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5 text-xs font-bold uppercase tracking-widest"
+                  style={{
+                    background: "rgba(238,116,41,0.12)",
+                    color: "var(--sw-primary)",
+                    border: "1px solid rgba(238,116,41,0.25)",
+                  }}
+                >
+                  <Star className="w-3.5 h-3.5 fill-primary text-primary animate-pulse" />
+                  {meta.eyebrow}
+                </div>
 
-            <p className="text-base sm:text-lg text-slate-500 mb-10 max-w-xl mx-auto leading-relaxed">
-              {meta.subtitle}
-            </p>
-          </motion.div>
-        </div>
-      </div>
+                <h1
+                  className="text-5xl sm:text-6xl md:text-7xl font-bold mb-5 leading-[1.1]"
+                  style={{ fontFamily: "var(--font-heading)", color: "var(--sw-navy)" }}
+                >
+                  {meta.titlePrefix}{" "}
+                  <span
+                    className="relative inline-block"
+                    style={{
+                      background: "linear-gradient(135deg, var(--sw-primary) 0%, #f5a623 100%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      backgroundClip: "text",
+                    }}
+                  >
+                    {meta.titleAccent}
+                  </span>
+                </h1>
 
-      {/* ══════════════════════ CATEGORIES ══════════════════════ */}
-      <div className="bg-white">
-        <WeddingCategoriesSection />
-      </div>
+                <p className="text-base sm:text-lg text-slate-500 mb-10 max-w-xl mx-auto leading-relaxed">
+                  {meta.subtitle}
+                </p>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* ══════════════════════ CATEGORIES ══════════════════════ */}
+          <div className="bg-white">
+            <WeddingCategoriesSection />
+          </div>
+        </>
+      ) : (
+        <div className="pt-28" />
+      )}
 
       {/* ══════════════════════ STICKY FILTER BAR ══════════════════════ */}
       <VenueFilterBar
         activeCities={activeCities}
-        onCityChange={setActiveCities}
+        onCityChange={handleCityChange}
         activeCategory={activeCategory || "All"}
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder={`Search by ${(activeCategory || "vendor").toLowerCase()} name, city, or specialty…`}
+        guests={initialQuery?.guests}
+        onGuestsChange={(v) => setParam("guests", v)}
+        budget={initialQuery?.budget}
+        onBudgetChange={(v) => setParam("budget", v)}
       />
 
       {/* ══════════════════════ MAIN CONTENT ══════════════════════ */}
@@ -261,9 +406,10 @@ export default function PublicVendorDirectory({
           <div>
             <p className="text-sm text-slate-500">
               Showing{" "}
-              <span className="font-bold text-slate-800">{filtered.length}</span>{""}
-              {(activeCategory || "vendor").toLowerCase()}
-              {filtered.length !== 1 && !(activeCategory || "vendor").toLowerCase().endsWith("s") ? "s" : ""}
+              <span className="font-bold text-slate-800">{filtered.length}</span>{" "}
+              {/* Category names are already plural ("Caterers"), so a count of
+                  one reads as "1 result" rather than "1 caterers". */}
+              {filtered.length === 1 ? "result" : (activeCategory || "vendors").toLowerCase()}
               {activeCities.length > 0 && (
                 <span>
                   {" "}in{" "}
@@ -303,7 +449,12 @@ export default function PublicVendorDirectory({
                   ))}
                   {activeFilters.length > 1 && (
                     <button
-                      onClick={() => { setSearch(""); setActiveCities([]); setSort("Recommended"); }}
+                      onClick={() => {
+                        setSearch("");
+                        setActiveCities([]);
+                        setSort("Recommended");
+                        dropParams("city", "guests", "start", "end", "budget", "q");
+                      }}
                       className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors underline"
                     >
                       Clear all
@@ -492,7 +643,8 @@ export default function PublicVendorDirectory({
             className="text-center mt-12 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium"
           >
             <SparklesIcon className="w-3.5 h-3.5" />
-            You&apos;ve seen all {filtered.length} vendors
+            You&apos;ve seen all {filtered.length}{" "}
+            {filtered.length === 1 ? "result" : (activeCategory || "vendors").toLowerCase()}
             <SparklesIcon className="w-3.5 h-3.5" />
           </motion.div>
         )}
