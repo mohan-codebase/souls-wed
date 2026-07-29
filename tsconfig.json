@@ -11,6 +11,12 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Tests under tests/ import with explicit .ts extensions, which Node's
+    // --experimental-strip-types requires. Safe to allow project-wide: it
+    // permits the extension, it doesn't mandate it, and it needs noEmit
+    // (already set above). Keeps tests inside the normal typecheck instead of
+    // excluding them from it.
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [

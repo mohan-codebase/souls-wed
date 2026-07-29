@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "npm run test:unit",
-    "test:unit": "node --test --experimental-strip-types 'tests/unit/**/*.test.ts'",
+    "test:unit": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON 'tests/unit/**/*.test.ts'",
     "test:api": "node --test tests/api/**/*.test.mjs"
   },
   "dependencies": {

@@ -6,6 +6,13 @@ actually found and fixed — the suite exists to notice if any of them returns.
 No test framework is installed. These use Node's built-in runner
 (`node --test`), so there is nothing to `npm install` and nothing to configure.
 
+The `test:unit` script passes `--disable-warning=MODULE_TYPELESS_PACKAGE_JSON`.
+Node otherwise warns that the `lib/*.ts` files being imported have no declared
+module type. The fix Node suggests — adding `"type": "module"` to the root
+`package.json` — would flip every `.js` file in the project to ESM and break the
+PostCSS and Next configs, so the warning is suppressed instead. It refers only
+to a module-detection overhead, which is irrelevant at this scale.
+
 ## Running
 
 ```bash
