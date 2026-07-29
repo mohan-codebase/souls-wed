@@ -1,4 +1,5 @@
 import { connectDB } from "@/lib/mongodb";
+import { hit, clientIp, LIMITS, tooManyRequests } from "@/lib/rate-limit";
 import { Subscriber } from "@/lib/models/Subscriber";
 import { sendSubscriberNotificationEmail } from "@/lib/mail";
 import { NextResponse } from "next/server";
@@ -7,6 +8,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: Request) {
   try {
+    // Rate limited: this endpoint triggers outbound email, so without a cap it
+    // is a free spam relay (and a way to mail-bomb an arbitrary address).
+    const rl = hit(`subscribe:${clientIp(req)}`, LIMITS.PUBLIC_FORM.limit, LIMITS.PUBLIC_FORM.windowMs);
+    if (!rl.ok) {
+      return tooManyRequests("Too many subscription attempts. Please try again later.", rl.retryAfter);
+    }
+
     await connectDB();
     const body = await req.json();
     const email = String(body.email || "").trim().toLowerCase();

@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { Booking } from "@/lib/models/Booking";
-import { Vendor } from "@/lib/models/Vendor";
+import { getVendorBlockedDates } from "@/lib/booking-access";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
@@ -45,19 +45,11 @@ export async function GET(req: Request) {
       }
     });
 
-    // Fetch unavailable dates directly from Vendor model if this is a vendor
-    let unavailableDates: string[] = [];
-    try {
-      const vendor = await Vendor.findById(providerId);
-      if (vendor && vendor.unavailableDates) {
-        unavailableDates = vendor.unavailableDates.map((d: Date) => 
-          new Date(d).toISOString().split("T")[0]
-        );
-      }
-    } catch (e) {
-      // providerId might be a static venue string id, not an ObjectId
-      // Ignore this error
-    }
+    // Dates the owning vendor has blocked out manually. Resolved via the
+    // listing, because providerId is a venue slug or service id rather than a
+    // Vendor._id — the old direct findById always failed silently, so the
+    // calendar never greyed these out.
+    const unavailableDates = await getVendorBlockedDates(providerId);
 
     const allBlockedDates = Array.from(new Set([...bookedDates, ...unavailableDates]));
 

@@ -92,3 +92,50 @@ export async function getVendorEmailForProvider(providerId: string): Promise<str
   const vendor = await Vendor.findById(vendorId).select("email").lean();
   return vendor?.email || null;
 }
+
+/**
+ * The `Vendor._id` that owns a listing, resolved from whichever id convention
+ * `providerId` happens to use.
+ */
+export async function getVendorIdForProvider(providerId: string): Promise<string | null> {
+  if (!providerId) return null;
+
+  await connectDB();
+
+  const venue = await Venue.findOne({ venueId: providerId }).select("vendorId").lean();
+  if (venue?.vendorId) return String(venue.vendorId);
+
+  const service = await ServiceListing.findOne({ serviceId: providerId })
+    .select("vendorId")
+    .lean();
+  if (service?.vendorId) return String(service.vendorId);
+
+  if (mongoose.Types.ObjectId.isValid(providerId)) return providerId;
+
+  return null;
+}
+
+/**
+ * Dates the vendor has manually blocked out, as `YYYY-MM-DD` strings.
+ *
+ * The two callers of this used to do `Vendor.findById(providerId)` directly.
+ * But `providerId` is a venue slug or a service id — never a `Vendor._id` — so
+ * `findById` threw a CastError that the surrounding try/catch swallowed, and
+ * the blocked dates were silently ignored. The Business Profile panel that
+ * promises "customers won't be able to book these dates" had never worked for
+ * any real listing. See AUDIT-REPORT.md #8.
+ */
+export async function getVendorBlockedDates(providerId: string): Promise<string[]> {
+  const vendorId = await getVendorIdForProvider(providerId);
+  if (!vendorId || !mongoose.Types.ObjectId.isValid(vendorId)) return [];
+
+  const vendor = await Vendor.findById(vendorId).select("unavailableDates").lean();
+  if (!vendor?.unavailableDates?.length) return [];
+
+  const iso = vendor.unavailableDates.map((d: Date | string) => {
+    const parsed = new Date(d);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().split("T")[0];
+  });
+
+  return iso.filter((d: string | null): d is string => Boolean(d));
+}

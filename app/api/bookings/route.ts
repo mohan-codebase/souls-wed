@@ -27,7 +27,11 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
 import { quoteBooking, PricingError } from "@/lib/pricing";
-import { getVendorProviderIds, getVendorEmailForProvider } from "@/lib/booking-access";
+import {
+  getVendorProviderIds,
+  getVendorEmailForProvider,
+  getVendorBlockedDates,
+} from "@/lib/booking-access";
 import { sendBookingCreatedEmails, dispatch } from "@/lib/mail";
 
 /**
@@ -144,35 +148,34 @@ export async function POST(req: Request) {
       );
     }
 
-    // Also check the vendor's own unavailableDates (days blocked outside the platform)
-    try {
-      const vendor = await Vendor.findById(providerId);
-      if (vendor?.unavailableDates?.length) {
-        const blocked = new Set(
-          vendor.unavailableDates.map((d: Date) => new Date(d).toISOString().split("T")[0])
+    // Also check the vendor's own unavailableDates (days blocked outside the
+    // platform). This previously did Vendor.findById(providerId) — but
+    // providerId is a venue slug or service id, so it always threw a CastError
+    // that the catch swallowed, and blocked dates were never enforced.
+    const blockedDates = await getVendorBlockedDates(providerId);
+    if (blockedDates.length) {
+      const blocked = new Set(blockedDates);
+
+      const requestedDates: string[] = [];
+      if (bookingType === "room") {
+        const currentDate = new Date(checkIn);
+        const endDate = new Date(checkOut);
+        while (currentDate <= endDate) {
+          requestedDates.push(currentDate.toISOString().split("T")[0]);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } else {
+        requestedDates.push(
+          ...eventDates.map((d: string) => new Date(d).toISOString().split("T")[0])
         );
-
-        let requestedDates: string[] = [];
-        if (bookingType === "room") {
-          let currentDate = new Date(checkIn);
-          const endDate = new Date(checkOut);
-          while (currentDate <= endDate) {
-            requestedDates.push(currentDate.toISOString().split("T")[0]);
-            currentDate.setDate(currentDate.getDate() + 1);
-          }
-        } else {
-          requestedDates = eventDates.map((d: string) => new Date(d).toISOString().split("T")[0]);
-        }
-
-        if (requestedDates.some((d) => blocked.has(d))) {
-          return NextResponse.json(
-            { message: "This date is unavailable. Please select a different date." },
-            { status: 409 }
-          );
-        }
       }
-    } catch {
-      // providerId might be a static venue string id, not an ObjectId — ignore
+
+      if (requestedDates.some((d) => blocked.has(d))) {
+        return NextResponse.json(
+          { message: "This date is unavailable. Please select a different date." },
+          { status: 409 }
+        );
+      }
     }
 
     // ─── Step 5: Price the booking SERVER-SIDE ───

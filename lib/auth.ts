@@ -131,3 +131,20 @@ export function validateName(name: string): string | null {
 
   return null;
 }
+
+/**
+ * Constant-time string comparison.
+ *
+ * `===` on secrets leaks length and prefix information through timing. Used for
+ * OTP codes, where the search space is small enough (10^6) that a timing oracle
+ * meaningfully helps an attacker.
+ */
+export function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(String(a ?? ""), "utf8");
+  const bufB = Buffer.from(String(b ?? ""), "utf8");
+  // timingSafeEqual throws on length mismatch, which is itself a leak — hash
+  // both sides first so the comparison is always over equal-length buffers.
+  const hashA = crypto.createHash("sha256").update(bufA).digest();
+  const hashB = crypto.createHash("sha256").update(bufB).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}

@@ -83,3 +83,39 @@ export const pendingVendorSignupSessionOptions: SessionOptions = {
     maxAge: 60 * 10, // 10 minutes — just long enough to fill in the form
   },
 };
+
+/**
+ * Proof that the caller has already cleared step one of a two-factor login
+ * (i.e. supplied the correct password) and is now owed the chance to submit an
+ * OTP.
+ *
+ * WHY THIS EXISTS
+ *
+ * `POST /api/auth/verify-2fa` used to accept `{ email, role, otp }` from an
+ * anonymous caller and mint a full session on an OTP match. It never re-checked
+ * the password, so possession of a correct 6-digit code was, by itself, enough
+ * to log in as that account. Combined with the absence of any attempt limit,
+ * an attacker could grind the code space during a victim's real login window
+ * and take over the account without ever knowing the password.
+ *
+ * Login now issues this sealed, 10-minute cookie, and verify-2fa reads the
+ * identity from it instead of trusting the posted email. See AUDIT-REPORT.md #6.
+ */
+export interface PendingTwoFactorData {
+  userId: string;
+  email: string;
+  role: "user" | "vendor" | "admin";
+  /** Unix ms. Belt and braces alongside the cookie's own maxAge. */
+  expiresAt: number;
+}
+
+export const pendingTwoFactorSessionOptions: SessionOptions = {
+  password: process.env.SESSION_SECRET as string,
+  cookieName: "soulswed-pending-2fa",
+  cookieOptions: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 60 * 10, // 10 minutes — the OTP itself lives 15
+  },
+};

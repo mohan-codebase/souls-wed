@@ -1,4 +1,5 @@
 import { connectDB } from "@/lib/mongodb";
+import { hit, clientIp, LIMITS, tooManyRequests } from "@/lib/rate-limit";
 import { Vendor } from "@/lib/models/Vendor";
 import { Admin } from "@/lib/models/Admin";
 import { User } from "@/lib/models/User";
@@ -9,6 +10,13 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
+    // Rate limited: this endpoint triggers outbound email, so without a cap it
+    // is a free spam relay (and a way to mail-bomb an arbitrary address).
+    const rl = hit(`signup:${clientIp(req)}`, LIMITS.SIGNUP.limit, LIMITS.SIGNUP.windowMs);
+    if (!rl.ok) {
+      return tooManyRequests("Too many sign-up attempts from this network. Please try again later.", rl.retryAfter);
+    }
+
     await connectDB();
     const body = await req.json();
     const { role, name, email, password } = body;

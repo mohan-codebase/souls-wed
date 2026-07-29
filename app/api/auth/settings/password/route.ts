@@ -2,7 +2,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Admin } from "@/lib/models/Admin";
 import { Vendor } from "@/lib/models/Vendor";
 import { User } from "@/lib/models/User";
-import { verifyPassword, hashPassword } from "@/lib/auth";
+import { verifyPassword, hashPassword, validatePassword } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
@@ -25,11 +25,12 @@ export async function POST(req: Request) {
       );
     }
 
-    if (newPassword.length < 6) {
-      return NextResponse.json(
-        { message: "New password must be at least 6 characters long." },
-        { status: 400 }
-      );
+    // Signup enforces validatePassword() — 8+ chars with mixed case, a digit and
+    // a symbol — but this route only checked length >= 6, so a user (or an
+    // admin) could immediately downgrade to a weak password. See AUDIT-REPORT #15.
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      return NextResponse.json({ message: passwordError }, { status: 400 });
     }
 
     let account = null;

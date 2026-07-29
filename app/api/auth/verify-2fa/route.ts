@@ -7,27 +7,71 @@ import { sendLoginNotificationEmail, dispatch } from "@/lib/mail";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
-import { SessionData, sessionOptions } from "@/lib/session";
+import {
+  SessionData,
+  sessionOptions,
+  PendingTwoFactorData,
+  pendingTwoFactorSessionOptions,
+} from "@/lib/session";
+import { hit, reset, LIMITS, tooManyRequests } from "@/lib/rate-limit";
+import { timingSafeEqualStr } from "@/lib/auth";
 import { describeDevice } from "@/lib/device";
 
 export async function POST(req: Request) {
   try {
     await connectDB();
-    const { email, role, otp } = await req.json();
+    const { otp } = await req.json();
 
-    if (!email || !role || !otp) {
+    if (!otp) {
+      return NextResponse.json({ message: "A verification code is required." }, { status: 400 });
+    }
+
+    // ─── Who is this? ───
+    // Read the identity from the sealed cookie login issued, NOT from the
+    // request body. Previously this endpoint took `{ email, role, otp }` from
+    // an anonymous caller and minted a session on any OTP match — so a correct
+    // code alone logged you in, with no proof the password step ever happened.
+    const pending = await getIronSession<PendingTwoFactorData>(
+      await cookies(),
+      pendingTwoFactorSessionOptions
+    );
+
+    if (!pending.userId || !pending.email || !pending.expiresAt || pending.expiresAt < Date.now()) {
       return NextResponse.json(
-        { message: "Email, role, and OTP are required." },
-        { status: 400 }
+        { message: "Your sign-in session expired. Please enter your password again." },
+        { status: 440 }
       );
     }
 
-    // Check OTP
-    const otpRecord = await Otp.findOne({ email: email.toLowerCase().trim(), role, otp });
-    
-    if (!otpRecord) {
+    const email = pending.email;
+    const role = pending.role;
+
+    // ─── Rate limit the guesses ───
+    // A 6-digit code is only 1,000,000 possibilities; with unlimited attempts
+    // and a 15-minute window it was gridable. Keyed on the account, so an
+    // attacker can't sidestep it by rotating IPs.
+    const otpKey = `2fa:${role}:${email.toLowerCase().trim()}`;
+    const limited = hit(otpKey, LIMITS.OTP_VERIFY.limit, LIMITS.OTP_VERIFY.windowMs);
+    if (!limited.ok) {
+      // Burn the code entirely — an attacker who has exhausted their guesses
+      // should not get another shot when the window rolls over.
+      await Otp.deleteMany({ email: email.toLowerCase().trim(), role });
+      return tooManyRequests(
+        "Too many incorrect codes. Please sign in again to request a new one.",
+        limited.retryAfter
+      );
+    }
+
+    // Look the record up by identity, then compare the code in constant time —
+    // matching on `otp` inside the query would leak timing through the index.
+    const otpRecord = await Otp.findOne({ email: email.toLowerCase().trim(), role });
+
+    if (!otpRecord || !timingSafeEqualStr(String(otp), String(otpRecord.otp))) {
       return NextResponse.json(
-        { message: "Invalid or expired OTP." },
+        {
+          message: "Invalid or expired code.",
+          attemptsRemaining: limited.remaining,
+        },
         { status: 400 }
       );
     }
@@ -49,8 +93,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Delete the used OTP
+    // Delete the used OTP, clear the guess counter, and burn the pending-2FA
+    // cookie so it can't be replayed.
     await Otp.deleteOne({ _id: otpRecord._id });
+    reset(otpKey);
+    pending.destroy();
 
     // Create encrypted session cookie
     const session = await getIronSession<SessionData>(

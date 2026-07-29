@@ -28,8 +28,14 @@ import { sendLoginNotificationEmail, sendVerificationOtpEmail, dispatch } from "
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
-import { SessionData, sessionOptions } from "@/lib/session";
+import {
+  SessionData,
+  sessionOptions,
+  PendingTwoFactorData,
+  pendingTwoFactorSessionOptions,
+} from "@/lib/session";
 import { describeDevice } from "@/lib/device";
+import { hit, reset, clientIp, LIMITS, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
@@ -40,6 +46,30 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { message: "Email, password, and role are required." },
         { status: 400 }
+      );
+    }
+
+    // ─── Step 0: Rate limit ───
+    // Two independent buckets: per-account stops brute-forcing one password,
+    // per-IP stops credential stuffing across many accounts. Checked before we
+    // touch the database so a flood costs us nothing.
+    const ip = clientIp(req);
+    const accountKey = `login:acct:${role}:${String(email).toLowerCase().trim()}`;
+    const ipKey = `login:ip:${ip}`;
+
+    const perAccount = hit(accountKey, LIMITS.LOGIN_PER_ACCOUNT.limit, LIMITS.LOGIN_PER_ACCOUNT.windowMs);
+    if (!perAccount.ok) {
+      return tooManyRequests(
+        "Too many sign-in attempts for this account. Please try again in a few minutes.",
+        perAccount.retryAfter
+      );
+    }
+
+    const perIp = hit(ipKey, LIMITS.LOGIN_PER_IP.limit, LIMITS.LOGIN_PER_IP.windowMs);
+    if (!perIp.ok) {
+      return tooManyRequests(
+        "Too many sign-in attempts from this network. Please try again later.",
+        perIp.retryAfter
       );
     }
 
@@ -80,6 +110,11 @@ export async function POST(req: Request) {
       );
     }
 
+    // Password was correct — clear the per-account counter so earlier typos
+    // don't count against them for the rest of the window. The per-IP bucket
+    // deliberately stays, since stuffing attacks do land occasional hits.
+    reset(accountKey);
+
     // ─── Step 3.5: Check if email is verified ───
     // Exception: Allow admin@soulswed.com to bypass verification for easier testing/admin access
     if (!user.isEmailVerified && user.email !== "admin@soulswed.com") {
@@ -104,9 +139,24 @@ export async function POST(req: Request) {
         otp: otpCode,
       });
 
-      // Send OTP via email
+      // Issue proof that the password step was cleared. verify-2fa reads the
+      // identity from this sealed cookie rather than trusting a posted email —
+      // otherwise a correct OTP alone is enough to log in as someone.
+      const pending = await getIronSession<PendingTwoFactorData>(
+        await cookies(),
+        pendingTwoFactorSessionOptions
+      );
+      pending.userId = user._id.toString();
+      pending.email = user.email;
+      pending.role = role;
+      pending.expiresAt = Date.now() + 10 * 60 * 1000;
+      await pending.save();
+
+      // Send OTP via email. Deliberately awaited, unlike the login notification:
+      // if this fails the user is stranded at a code prompt with no code, so a
+      // slow response beats a silent dead end.
       await sendVerificationOtpEmail(user.email, user.name, otpCode);
-      
+
       // Log for local dev
       console.log(`[2FA DEBUG] Login OTP for ${user.email}: ${otpCode}`);
 

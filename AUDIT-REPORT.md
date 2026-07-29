@@ -153,7 +153,49 @@ Atlas cluster.
 - **The user dashboard has no cancel-with-reason UI.** The customer's `cancel`
   action exists on the API; the dashboard still uses the older hard-`DELETE` path.
 
-**Still open:** #6, #8, #9, #10 (auth and calendar hardening), #11–#15, and the P3 list below.
+---
+
+## Fix log 3 — auth and calendar hardening
+
+**Fixed: #6, #8, #9, #10, #15.**
+
+| Change | Files |
+|---|---|
+| In-process fixed-window rate limiter with named limits. **Read the caveat at the top of the file** — it is per-instance, so it needs a Redis backing store if you ever run more than one replica or go serverless. | `lib/rate-limit.ts` (new) |
+| Login limited two ways: 5 attempts per account and 20 per IP, per 15 min. The account counter is cleared on a correct password so typos don't linger. | `app/api/auth/login/route.ts` |
+| `verify-2fa` no longer trusts the posted email. Login now issues a sealed 10-minute `pending-2fa` cookie and the OTP step reads identity from that, so a correct code alone can't log anyone in. Guesses capped at 5, after which the code is burned. Comparison is constant-time. | `lib/session.ts`, `app/api/auth/login/route.ts`, `app/api/auth/verify-2fa/route.ts`, `lib/auth.ts` |
+| Rate limits on `forgot-password` (per IP *and* per target address, so nobody can mail-bomb one inbox), `signup`, `inquiries`, `subscribe`. | 4 route files |
+| `proxy.ts` enforces role per dashboard prefix instead of just `isLoggedIn`, and sends a signed-in user hitting the wrong portal to their own. | `proxy.ts` |
+| Password changes run the real `validatePassword()` policy instead of `length >= 6` — for user, vendor **and admin**. | `app/api/auth/settings/password/route.ts`, `app/api/admin/settings/password/route.ts` |
+| Vendor blocked dates resolve the owning vendor through the listing, so they finally apply. | `lib/booking-access.ts`, `app/api/bookings/route.ts`, `app/api/bookings/availability/route.ts` |
+
+### Verified after the fix
+
+| Check | Before | After |
+|---|---|---|
+| Wrong password ×7 on one account | All 401, unlimited | 401 ×5 → **429**, `Retry-After: 900` |
+| `verify-2fa` called cold, no password step | Session issued on OTP match | **440** — "sign-in session expired" |
+| `abc123` as a new password | Accepted | **400** — "at least 8 characters" |
+| `password1` / `NoDigits!!` / `NOLOWERCASE1!` | Accepted | **400**, each with the specific rule |
+| Valid password, wrong current | — | **401** — proves the policy gate is what blocked the rest |
+| Admin opens `/vendor/dashboard` | Page JS served, client redirect | **Redirected at the edge** to `/admin/dashboard` |
+| Vendor blocks 2027-11-11, customer books it | Booking succeeded | Calendar shows it blocked; booking **409** |
+
+`npx tsc --noEmit` passes; `eslint` clean on the new files. Blocked-date test data restored.
+
+### Caveats
+
+- **The rate limiter is per-process.** Fine for a single Node server; useless on
+  serverless and weakened by every extra replica. `lib/rate-limit.ts` documents
+  the swap to Redis — only that file needs to change.
+- **`x-forwarded-for` is spoofable** unless your host overwrites it. The
+  account-scoped limits don't depend on the IP and are the real backstop.
+- **Admin still has no 2FA** (P3 item 6). It is now the only role that can't
+  enable it, and it's the most privileged.
+- The login page still posts `email`/`role` to `verify-2fa`; the server ignores
+  them. Harmless, but worth tidying when that file is next touched.
+
+**Still open:** #11–#14, and the P3 list below.
 
 ---
 
