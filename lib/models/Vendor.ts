@@ -21,6 +21,11 @@ const VendorSchema = new Schema({
   businessName: { type: String },  // Brand/business name — was missing before, signup data was silently dropped
   email:        { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   passwordHash: { type: String },
+
+  // Vendors had no 2FA option despite holding customer contact data.
+  // Opt-in (unlike User, which defaults to on) so existing accounts are not
+  // locked out by a deploy.
+  twoFactorEnabled: { type: Boolean, default: false },
   googleId:     { type: String, unique: true, sparse: true },
   phone:        { type: String },
   category:     { type: String }, // Legacy, kept for backwards compatibility during migration

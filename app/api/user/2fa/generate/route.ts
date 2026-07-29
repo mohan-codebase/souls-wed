@@ -1,5 +1,5 @@
 import { connectDB } from "@/lib/mongodb";
-import { User } from "@/lib/models/User";
+import { getAccountForSession } from "@/lib/accounts";
 import { Otp } from "@/lib/models/Otp";
 import { sendVerificationOtpEmail } from "@/lib/mail";
 import { NextResponse } from "next/server";
@@ -15,21 +15,26 @@ export async function POST(req: Request) {
     }
 
     await connectDB();
-    const dbUser = await User.findById(session.userId);
-    if (!dbUser) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
+
+    // Resolve whichever collection this session belongs to. This route used to
+    // look only in `User`, so an admin or vendor calling it got a 404 and had
+    // no way to turn 2FA on at all.
+    const resolved = await getAccountForSession(session);
+    if (!resolved) {
+      return NextResponse.json({ success: false, message: "Account not found" }, { status: 404 });
     }
+    const { account: dbUser, role } = resolved;
 
     // Generate 6-digit OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     
     // Clear existing OTPs
-    await Otp.deleteMany({ email: dbUser.email.toLowerCase().trim(), role: "user" });
+    await Otp.deleteMany({ email: dbUser.email.toLowerCase().trim(), role });
     
     // Save new OTP
     await Otp.create({
       email: dbUser.email.toLowerCase().trim(),
-      role: "user",
+      role,
       otp: otpCode,
     });
 

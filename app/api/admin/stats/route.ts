@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
+import { customerFilter } from "@/lib/accounts";
 
 export async function GET() {
   try {
@@ -28,7 +29,10 @@ export async function GET() {
 
     // 3. Fetch statistics in parallel
     const [totalUsers, totalVendors, totalBookings, totalAdmins] = await Promise.all([
-      User.countDocuments({ role: { $ne: "admin" } }),
+      // Shares one definition with /api/admin/users — see customerFilter().
+      // These were two hand-written filters that had drifted apart, so the
+      // tile read 6 while the table below it listed 5.
+      User.countDocuments(customerFilter()),
       Vendor.countDocuments(),
       Booking.countDocuments(),
       Admin.countDocuments(),

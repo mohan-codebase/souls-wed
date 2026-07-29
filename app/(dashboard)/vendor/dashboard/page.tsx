@@ -30,6 +30,7 @@ import { MessageSquareIcon } from "@/components/ui/message-square";
 import { TrendingUpIcon } from "@/components/ui/trending-up";
 import { SearchIcon } from "@/components/ui/search";
 import BookingCard from "@/components/booking/BookingCard";
+import { formatAsCurrency } from "@/lib/currency";
 import ImageUploadInput from "@/components/shared/ImageUploadInput";
 import MediaGalleryInput from "@/components/shared/MediaGalleryInput";
 import PlanOfferModal from "@/components/plans/PlanOfferModal";
@@ -62,7 +63,7 @@ interface VendorSession {
   unavailableDates?: string[];
 }
 
-type TabType = "overview" | "leads" | "settings" | "account-settings" | "services";
+type TabType = "overview" | "leads" | "earnings" | "settings" | "account-settings" | "services";
 
 interface DashboardBooking {
   _id: string;
@@ -580,6 +581,28 @@ export default function VendorDashboard() {
     (b: any) => b.status !== "cancelled" && b.status !== "completed"
   );
 
+  // ── Earnings (AUDIT-REPORT.md #11) ──
+  // Admin had a full payout ledger; the partner portal had nothing, so a vendor
+  // couldn't see what they'd earned or what commission was taken. Figures come
+  // from /api/vendor/earnings, which shares lib/payouts.ts with the admin
+  // ledger so the two can't disagree.
+  const [earnings, setEarnings] = useState<any[]>([]);
+  const [earningsStats, setEarningsStats] = useState<any>(null);
+  const [earningsByListing, setEarningsByListing] = useState<any[]>([]);
+
+  const fetchEarnings = async () => {
+    try {
+      const res = await fetch("/api/vendor/earnings");
+      if (!res.ok) return;
+      const data = await res.json();
+      setEarnings(data.earnings || []);
+      setEarningsStats(data.stats || null);
+      setEarningsByListing(data.byListing || []);
+    } catch (err) {
+      console.error("Failed to fetch earnings", err);
+    }
+  };
+
   const fetchBookings = async () => {
     setLoadingData(true);
     try {
@@ -588,6 +611,7 @@ export default function VendorDashboard() {
         const data = await res.json();
         setBookings(data.bookings || []);
       }
+      await fetchEarnings();
     } catch (err) {
       console.error("Failed to fetch bookings", err);
     } finally {
@@ -815,6 +839,7 @@ export default function VendorDashboard() {
       count: venues.length + services.length || null
     },
     { id: "leads", label: "Booking Inquiries", count: activeBookings.length || null, icon: Inbox },
+    { id: "earnings", label: "Earnings", icon: TrendingUpIcon },
     { id: "settings", label: "Business Profile", icon: SettingsIcon },
     { id: "account-settings", label: "Settings", icon: SlidersHorizontalIcon },
     { id: "home", label: "Back to Home", icon: HomeIcon, href: "/" },
@@ -1022,6 +1047,7 @@ export default function VendorDashboard() {
                 <span className="block sm:inline">
                   {activeTab === "overview" && "Manage your profile showcase, settings, and upcoming client bookings."}
                   {activeTab === "leads" && "All couple enquiries and booking requests."}
+                  {activeTab === "earnings" && "What you've earned, what's been paid out, and what's still to collect."}
                   {activeTab === "services" && "Manage your active listings and venues."}
                   {activeTab === "settings" && "Manage your vendor portal configuration."}
                   {activeTab === "account-settings" && "Appearance, security & account preferences."}
@@ -1433,6 +1459,161 @@ export default function VendorDashboard() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "earnings" && (
+              <div className="flex flex-col gap-6">
+                {/* Headline figures. Deliberately shows what was COLLECTED
+                    rather than headline booking value — the platform only ever
+                    holds the advance, so gross would overstate what's owed. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {[
+                    {
+                      label: "Net earnings",
+                      value: earningsStats?.totalCollected - earningsStats?.totalCommission,
+                      hint: "After platform commission",
+                      accent: "text-emerald-600 dark:text-emerald-400",
+                    },
+                    {
+                      label: "Awaiting payout",
+                      value: earningsStats?.pendingPayoutsAmount,
+                      hint: "Not yet released to you",
+                      accent: "text-amber-600 dark:text-amber-400",
+                    },
+                    {
+                      label: "Paid out",
+                      value: earningsStats?.releasedPayoutsAmount,
+                      hint: "Already transferred",
+                      accent: "text-blue-600 dark:text-blue-400",
+                    },
+                    {
+                      label: "To collect at venue",
+                      value: earningsStats?.balanceDueAtVenue,
+                      hint: "Customer pays you directly",
+                      accent: headingText,
+                    },
+                  ].map((card) => (
+                    <div key={card.label} className={`rounded-3xl p-5 border ${cardClass}`}>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-stone-400">
+                        {card.label}
+                      </p>
+                      <p className={`text-2xl font-black mt-2 ${card.accent}`}>
+                        {formatAsCurrency(Number(card.value) || 0, "INR")}
+                      </p>
+                      <p className="text-[11px] text-stone-400 mt-1">{card.hint}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {earningsStats?.commissionRate != null && (
+                  <p className="text-[11px] text-stone-400 -mt-2">
+                    SoulsWed commission is{" "}
+                    <strong>{Math.round(earningsStats.commissionRate * 100)}%</strong> of the
+                    advance we collect on your behalf
+                    {earningsStats.totalCommission > 0 && (
+                      <> — {formatAsCurrency(earningsStats.totalCommission, "INR")} so far</>
+                    )}
+                    . The remaining balance is settled directly between you and the customer.
+                  </p>
+                )}
+
+                {earningsByListing.length > 0 && (
+                  <div className={`rounded-3xl p-6 border ${cardClass}`}>
+                    <h3 className={`font-extrabold text-base mb-4 ${headingText}`}>By listing</h3>
+                    <div className="flex flex-col gap-2">
+                      {earningsByListing.map((l: any) => (
+                        <div
+                          key={l.providerId}
+                          className={`flex items-center justify-between py-2.5 border-b last:border-0 ${dividerClass}`}
+                        >
+                          <div>
+                            <p className={`text-sm font-bold ${headingText}`}>{l.providerName}</p>
+                            <p className="text-[11px] text-stone-400">
+                              {l.bookings} booking{l.bookings === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                            {formatAsCurrency(l.net, "INR")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className={`rounded-3xl p-6 border ${cardClass} min-h-[240px]`}>
+                  <div className={`flex justify-between items-center pb-3 mb-3 border-b ${dividerClass}`}>
+                    <h3 className={`font-extrabold text-base ${headingText}`}>Payment history</h3>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-stone-400">
+                      {earnings.length} paid booking{earnings.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  {earnings.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center text-center py-14">
+                      <h4 className="font-bold text-sm text-stone-500">No earnings yet</h4>
+                      <p className="text-xs text-stone-400 max-w-sm mt-1">
+                        Once a customer pays the advance on one of your listings, it appears
+                        here with the commission and your net payout broken out.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="text-[10px] uppercase tracking-wider font-black text-stone-400">
+                            <th className="pb-3">Booking</th>
+                            <th className="pb-3">Customer</th>
+                            <th className="pb-3 text-right">Collected</th>
+                            <th className="pb-3 text-right">Commission</th>
+                            <th className="pb-3 text-right">Your payout</th>
+                            <th className="pb-3 text-right">At venue</th>
+                            <th className="pb-3 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {earnings.map((e: any) => (
+                            <tr key={e.bookingId} className={`border-t ${dividerClass}`}>
+                              <td className="py-3">
+                                <p className={`font-bold ${headingText}`}>{e.providerName}</p>
+                                <p className="text-[10px] text-stone-400 font-mono">
+                                  {String(e.bookingId).slice(-8).toUpperCase()}
+                                </p>
+                              </td>
+                              <td className="py-3 text-stone-500">{e.userName}</td>
+                              <td className="py-3 text-right font-bold">
+                                {formatAsCurrency(e.amountPaid, e.currency)}
+                              </td>
+                              <td className="py-3 text-right text-stone-400">
+                                −{formatAsCurrency(e.commissionAmount, e.currency)}
+                              </td>
+                              <td className="py-3 text-right font-black text-emerald-600 dark:text-emerald-400">
+                                {formatAsCurrency(e.netVendorPayout, e.currency)}
+                              </td>
+                              <td className="py-3 text-right text-stone-400">
+                                {e.balanceDueAtVenue > 0
+                                  ? formatAsCurrency(e.balanceDueAtVenue, e.currency)
+                                  : "—"}
+                              </td>
+                              <td className="py-3 text-center">
+                                <span
+                                  className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                    e.payoutStatus === "released"
+                                      ? "text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/25 bg-emerald-50/70 dark:bg-emerald-500/10"
+                                      : "text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/25 bg-amber-50/70 dark:bg-amber-500/10"
+                                  }`}
+                                >
+                                  {e.payoutStatus}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

@@ -1,5 +1,5 @@
 import { connectDB } from "@/lib/mongodb";
-import { User } from "@/lib/models/User";
+import { getAccountForSession } from "@/lib/accounts";
 import { Otp } from "@/lib/models/Otp";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -20,16 +20,19 @@ export async function POST(req: Request) {
     }
 
     await connectDB();
-    const dbUser = await User.findById(session.userId);
-    if (!dbUser) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
+
+    // Same generalisation as the generate route — works for all three roles.
+    const resolved = await getAccountForSession(session);
+    if (!resolved) {
+      return NextResponse.json({ success: false, message: "Account not found" }, { status: 404 });
     }
+    const { account: dbUser, role } = resolved;
 
     // Verify OTP
     const otpRecord = await Otp.findOne({ 
-      email: dbUser.email.toLowerCase().trim(), 
-      role: "user",
-      otp: otp 
+      email: dbUser.email.toLowerCase().trim(),
+      role,
+      otp: otp
     });
 
     if (!otpRecord) {

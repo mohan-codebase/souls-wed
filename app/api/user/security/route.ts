@@ -1,5 +1,5 @@
 import { connectDB } from "@/lib/mongodb";
-import { User } from "@/lib/models/User";
+import { getAccountForSession } from "@/lib/accounts";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
@@ -13,15 +13,22 @@ export async function GET() {
     }
 
     await connectDB();
-    const dbUser = await User.findById(session.userId);
-    if (!dbUser) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
+
+    // Works for all three roles. Previously User-only, which is part of why
+    // admins had no 2FA switch anywhere in their settings.
+    const resolved = await getAccountForSession(session);
+    if (!resolved) {
+      return NextResponse.json({ success: false, message: "Account not found" }, { status: 404 });
     }
+    const { account: dbUser, role } = resolved;
 
     return NextResponse.json({
       success: true,
+      role,
       security: {
-        twoFactorEnabled: dbUser.twoFactorEnabled ?? true,
+        // Users default to 2FA on; vendors and admins are opt-in so an existing
+        // account isn't locked out by a deploy that adds the field.
+        twoFactorEnabled: dbUser.twoFactorEnabled ?? role === "user",
         loginAlertsEnabled: dbUser.loginAlertsEnabled ?? true,
         sessionTimeoutDays: dbUser.sessionTimeoutDays ?? 15,
       },
@@ -42,19 +49,19 @@ export async function POST(req: Request) {
     const { twoFactorEnabled, loginAlertsEnabled, sessionTimeoutDays } = await req.json();
 
     await connectDB();
-    const updatedUser = await User.findByIdAndUpdate(
-      session.userId,
-      {
-        ...(twoFactorEnabled !== undefined && { twoFactorEnabled }),
-        ...(loginAlertsEnabled !== undefined && { loginAlertsEnabled }),
-        ...(sessionTimeoutDays !== undefined && { sessionTimeoutDays: Number(sessionTimeoutDays) }),
-      },
-      { new: true }
-    );
 
-    if (!updatedUser) {
-      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
+    const resolved = await getAccountForSession(session);
+    if (!resolved) {
+      return NextResponse.json({ success: false, message: "Account not found" }, { status: 404 });
     }
+    const updatedUser = resolved.account;
+
+    if (twoFactorEnabled !== undefined) updatedUser.twoFactorEnabled = Boolean(twoFactorEnabled);
+    if (loginAlertsEnabled !== undefined) updatedUser.loginAlertsEnabled = Boolean(loginAlertsEnabled);
+    if (sessionTimeoutDays !== undefined) {
+      updatedUser.sessionTimeoutDays = Number(sessionTimeoutDays);
+    }
+    await updatedUser.save();
 
     return NextResponse.json({
       success: true,

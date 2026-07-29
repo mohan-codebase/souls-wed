@@ -331,6 +331,43 @@ export default function AdminDashboard() {
     });
   };
 
+  // ── Admin 2FA (AUDIT-REPORT.md P3.6) ──
+  // Admin was the only role with no two-factor option — the most privileged
+  // account with the weakest available authentication. The API is shared with
+  // users and vendors via /api/user/security.
+  const [adminTwoFactor, setAdminTwoFactor] = useState<boolean | null>(null);
+  const [twoFactorSaving, setTwoFactorSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/user/security")
+      .then((r) => r.json())
+      .then((d) => setAdminTwoFactor(Boolean(d?.security?.twoFactorEnabled)))
+      .catch(() => setAdminTwoFactor(false));
+  }, []);
+
+  const handleToggleTwoFactor = async () => {
+    const next = !adminTwoFactor;
+    setTwoFactorSaving(true);
+    try {
+      const res = await fetch("/api/user/security", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ twoFactorEnabled: next }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdminTwoFactor(next);
+        notify(next ? "Two-factor authentication enabled" : "Two-factor authentication disabled");
+      } else {
+        notify(data.message || "Could not update two-factor setting.", "error");
+      }
+    } catch {
+      notify("Network error while updating two-factor setting.", "error");
+    } finally {
+      setTwoFactorSaving(false);
+    }
+  };
+
   const handleUpdateBookingStatus = async (bookingId: string, status: string) => {
     try {
       const res = await fetch("/api/admin/bookings", {
@@ -2289,6 +2326,42 @@ export default function AdminDashboard() {
                           <p className={`text-sm font-bold ${isDarkMode ? "text-[#EE7429]" : "text-stone-600"}`}>Dark</p>
                           <p className="text-[10px] text-stone-400 mt-0.5">Easy on the eyes</p>
                         </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2b. TWO-FACTOR AUTHENTICATION */}
+                  <div className={`rounded-3xl p-6 border shadow-none ${cardClass}`}>
+                    <div className={`flex items-center justify-between pb-4 border-b mb-5 ${dividerClass}`}>
+                      <div>
+                        <h3 className={`font-extrabold text-base ${headingText}`}>Two-Factor Authentication</h3>
+                        <p className="text-[10px] text-stone-400 font-semibold mt-0.5">
+                          Require an emailed code in addition to your password
+                        </p>
+                      </div>
+                      <Shield className="w-5 h-5 text-stone-300" />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-6">
+                      <p className="text-xs text-stone-500 max-w-md">
+                        {adminTwoFactor
+                          ? "On — you'll be asked for a 6-digit code emailed to you each time you sign in."
+                          : "Off. This is the highest-privilege account on the platform; turning this on is strongly recommended."}
+                      </p>
+                      <button
+                        onClick={handleToggleTwoFactor}
+                        disabled={twoFactorSaving || adminTwoFactor === null}
+                        className={`relative shrink-0 w-14 h-7 rounded-full transition-colors disabled:opacity-50 cursor-pointer ${
+                          adminTwoFactor ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-700"
+                        }`}
+                        aria-pressed={Boolean(adminTwoFactor)}
+                        aria-label="Toggle two-factor authentication"
+                      >
+                        <span
+                          className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                            adminTwoFactor ? "left-8" : "left-1"
+                          }`}
+                        />
                       </button>
                     </div>
                   </div>

@@ -275,7 +275,80 @@ node scripts/repair-orphaned-booking-providers.mjs --apply   # write
 Until this runs, the six legacy bookings still hold dates that the public
 calendar shows as free.
 
-**Still open:** #11 (vendor earnings view) and the P3 list below.
+---
+
+## Fix log 5 — vendor earnings and P3 cleanup
+
+**Fixed: #11**, plus P3 items 1, 4 and 6. All 18 numbered findings are now closed.
+
+### #11 — vendor earnings
+
+| Change | Files |
+|---|---|
+| Commission maths extracted so the admin ledger and the vendor's screen cannot disagree about what a partner is owed. | `lib/payouts.ts` (new) |
+| Vendor-scoped earnings endpoint — read-only; releasing a payout stays with admin. | `app/api/vendor/earnings/route.ts` (new) |
+| **Earnings** tab in the partner portal: net earnings, awaiting payout, paid out, and balance to collect at the venue; a per-listing breakdown; and a payment history table showing collected → commission → net payout per booking. | `app/(dashboard)/vendor/dashboard/page.tsx` |
+| Admin ledger now also resolves each row to the vendor **account**, and returns a `byVendor` grouping. The "Vendor Partner" column showed listing names, so payouts weren't grouped by the party you'd actually pay. | `app/api/admin/payouts/route.ts` |
+
+Verified the two views agree on the same booking:
+
+| | Admin ledger | Vendor earnings |
+|---|---|---|
+| Collected | ₹30,000 | ₹30,000 |
+| Commission (15%) | ₹4,500 | ₹4,500 |
+| Net payout | ₹25,500 | ₹25,500 |
+
+(₹50,000 booking, ₹30,000 advance collected, ₹20,000 correctly shown as due at the venue.)
+
+### P3 items closed
+
+| # | Issue | Fix |
+|---|---|---|
+| 1 | Registered Users read 6, Customers list showed 5 | The two carried separately hand-written filters that had drifted — the list also excludes a `User` document for the admin's own address, which the counter didn't. Both now use `customerFilter()`. Verified 5 = 5. |
+| 4 | Vendor had no category | Inferred from the categories they actually list in, via the data-quality script. |
+| 6 | **Admin had no 2FA** — the most privileged role with the weakest available auth | `twoFactorEnabled` added to `Admin` and `Vendor` (opt-in, so no one is locked out by the deploy). The 2FA endpoints were hardcoded to the `User` collection — an admin calling them got a 404 — and now resolve the session's own collection via `lib/accounts.ts`. Toggle added to admin Settings. Verified read + enable + disable as admin. |
+| 3 | `country: "Global"` on real listings | `scripts/fix-listing-data-quality.mjs` infers the country from the city using a conservative lookup, and reports anything ambiguous instead of guessing. |
+
+`tsc --noEmit` passes; `eslint` clean on all new files.
+
+### P3 items deliberately left
+
+- **Dead `/api/admin/sessions` endpoint.** Fully implemented, called from nowhere;
+  `lastLoginAt` / `lastLoginDevice` / `lastLoginMethod` are written on every login
+  and never displayed. Either build the view or delete the route — it's a product
+  decision, not a bug.
+- **Dashboard tabs don't route.** Admin and vendor panels keep one URL, so there's
+  no deep-linking, refresh-in-place or browser back. The user dashboard already
+  does this correctly with `?tab=`. A contained refactor, but it touches every
+  panel in two 3,000-line files.
+- **Wishlist is localStorage-only.** Persisting it server-side needs a schema
+  addition and a sync path.
+- **Listing count mismatch** (26 / 28 / 25). The three numbers count different
+  things — searchable vs total vs live — so the fix is deciding what each label
+  should mean rather than changing a query.
+
+---
+
+## Remaining actions for you
+
+Three scripts, all dry-run by default:
+
+```bash
+node scripts/migrate-booking-payment-fields.mjs --mode=trust --dry-run
+node scripts/repair-orphaned-booking-providers.mjs
+node scripts/fix-listing-data-quality.mjs
+```
+
+Re-run each with `--apply` (or without `--dry-run`) once the preview looks right.
+
+And still outstanding, neither of which I can do for you:
+
+1. **Rotate the leaked secrets.** `.env` is no longer tracked, but Atlas
+   credentials, `SESSION_SECRET`, Stripe keys, SMTP, Cloudinary and a Google
+   OAuth secret remain readable in 12 earlier commits on GitHub.
+2. **Confirm the payout rule.** Commission and payouts now derive from money
+   actually collected rather than headline booking value. That is a commercial
+   decision, not just a bug fix.
 
 ---
 

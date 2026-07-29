@@ -4,6 +4,12 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
+import {
+  toPayoutRow,
+  summarisePayouts,
+  PAYABLE_BOOKING_FILTER,
+} from "@/lib/payouts";
+import { getVendorIdForProvider } from "@/lib/booking-access";
 
 async function checkAdminSession() {
   const session = await getIronSession<SessionData>(
@@ -16,7 +22,7 @@ async function checkAdminSession() {
   return true;
 }
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     if (!(await checkAdminSession())) {
       return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
@@ -28,71 +34,46 @@ export async function GET(req: Request) {
     // This previously keyed off `status: confirmed|completed`, which an admin
     // could set by hand — so flipping a dropdown on an unpaid booking queued a
     // real bank transfer to a vendor. Payouts now follow `paymentStatus`.
-    const bookings = await Booking.find({
-      paymentStatus: "paid",
-      status: { $in: ["confirmed", "completed"] },
-    }).sort({ createdAt: -1 });
+    const bookings = await Booking.find(PAYABLE_BOOKING_FILTER)
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const COMMISSION_RATE = 0.15; // 15% platform commission
+    // Commission maths lives in lib/payouts.ts so this ledger and the vendor's
+    // own earnings screen can never disagree about what a partner is owed.
+    const payouts = bookings.map(toPayoutRow);
+    const totals = summarisePayouts(payouts);
 
-    let totalGrossVolume = 0;   // headline booking value (GMV), for reporting
-    let totalCollected = 0;     // what actually landed in the platform account
-    let totalCommission = 0;
-    let pendingPayoutsAmount = 0;
-    let releasedPayoutsAmount = 0;
+    // Group by the vendor ACCOUNT, not the listing. The ledger's "Vendor
+    // Partner" column showed listing names ("Refinery Hotel New York"), so
+    // payouts weren't actually grouped by the party you'd pay.
+    const vendorIdByProvider = new Map<string, string>();
+    await Promise.all(
+      [...new Set(payouts.map((p) => p.providerId))].map(async (pid) => {
+        const vid = await getVendorIdForProvider(pid);
+        if (vid) vendorIdByProvider.set(pid, vid);
+      })
+    );
 
-    const payouts = bookings.map((b) => {
-      const gross = b.totalAmount || 0;
-      const collected = b.amountPaid || 0;
-
-      // Commission and payout are both derived from what we COLLECTED, not from
-      // the headline booking value. The platform only ever holds the advance —
-      // the balance is settled by the customer directly at the venue — so
-      // paying out `gross - commission` would transfer money we never received.
-      const commission = Math.round(collected * COMMISSION_RATE);
-      const netVendorPayout = collected - commission;
-      const balanceDueAtVenue = Math.max(0, gross - collected);
-      const payoutStatus = b.payoutStatus || "pending";
-
-      totalGrossVolume += gross;
-      totalCollected += collected;
-      totalCommission += commission;
-
-      if (payoutStatus === "released") {
-        releasedPayoutsAmount += netVendorPayout;
-      } else {
-        pendingPayoutsAmount += netVendorPayout;
-      }
-
-      return {
-        bookingId: b._id,
-        providerName: b.providerName,
-        userName: b.userName,
-        bookingType: b.bookingType,
-        totalAmount: gross,
-        advanceAmount: b.advanceAmount,
-        amountPaid: collected,
-        balanceDueAtVenue,
-        commissionAmount: commission,
-        netVendorPayout: netVendorPayout,
-        payoutStatus: payoutStatus,
-        payoutRef: b.payoutRef || "",
-        createdAt: b.createdAt,
-        eventDate: b.eventDate || (b.eventDates && b.eventDates[0]) || b.checkIn,
-      };
-    });
+    const byVendor: Record<string, { vendorId: string; rows: string[]; net: number }> = {};
+    for (const p of payouts) {
+      const vid = vendorIdByProvider.get(p.providerId) || "unassigned";
+      byVendor[vid] ??= { vendorId: vid, rows: [], net: 0 };
+      byVendor[vid].rows.push(p.bookingId);
+      if (p.payoutStatus === "pending") byVendor[vid].net += p.netVendorPayout;
+    }
 
     return NextResponse.json({
       success: true,
       stats: {
-        totalGrossVolume,
-        totalCollected,
-        totalCommission,
-        pendingPayoutsAmount,
-        releasedPayoutsAmount,
-        commissionRate: COMMISSION_RATE,
+        // Legacy key kept so the existing admin UI doesn't break.
+        totalGrossVolume: totals.grossBookingVolume,
+        ...totals,
       },
-      payouts,
+      payouts: payouts.map((p) => ({
+        ...p,
+        vendorAccountId: vendorIdByProvider.get(p.providerId) || null,
+      })),
+      byVendor: Object.values(byVendor),
     });
   } catch (error: unknown) {
     console.error("Error in GET /api/admin/payouts:", error);
@@ -131,7 +112,7 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const updateFields: Record<string, any> = { payoutStatus };
+    const updateFields: Record<string, unknown> = { payoutStatus };
     if (payoutRef !== undefined) {
       updateFields.payoutRef = payoutRef;
     }
