@@ -70,6 +70,8 @@ export interface Quote {
   /** The booking type the provider actually supports — the client must match this. */
   expectedBookingType: BookingKind;
   providerName: string;
+  /** Persist this as the booking's providerId — see ResolvedProvider.canonicalId. */
+  canonicalProviderId: string;
   providerImage: string;
   providerKind: "venue" | "service" | "vendor";
   /** Guest bounds, so the caller can validate headcount against the listing. */
@@ -92,6 +94,14 @@ export class PricingError extends Error {
  */
 interface ResolvedProvider {
   name: string;
+  /**
+   * The id this listing should be referenced by everywhere — `Venue.venueId`
+   * or `ServiceListing.serviceId`. Callers must persist THIS, not whatever the
+   * client sent: seed data once stored a Venue's raw `_id` as providerId, which
+   * made those bookings invisible to the vendor query and, worse, invisible to
+   * the double-booking check (which matches providerId as an exact string).
+   */
+  canonicalId: string;
   /** Thumbnail, denormalised onto the booking so cards don't need a second lookup. */
   image: string;
   kind: "venue" | "service" | "vendor";
@@ -113,6 +123,7 @@ interface ResolvedProvider {
  */
 function resolveServicePricing(
   name: string,
+  canonicalId: string,
   image: string,
   category: string | undefined,
   priceFromRaw: unknown,
@@ -133,6 +144,7 @@ function resolveServicePricing(
 
   const base: ResolvedProvider = {
     name,
+    canonicalId,
     image,
     kind,
     expectedBookingType: "vendor",
@@ -187,6 +199,7 @@ async function resolveProvider(providerId: string): Promise<ResolvedProvider | n
     const rentalCost = parsePrice(venue.rentalCost || venue.price);
     return {
       name: venue.name,
+      canonicalId: venue.venueId,
       image: venue.heroImage || venue.image || "",
       kind: "venue",
       // A venue can be booked as a venue or (if it has rooms) as accommodation.
@@ -208,6 +221,7 @@ async function resolveProvider(providerId: string): Promise<ResolvedProvider | n
   if (service) {
     return resolveServicePricing(
       service.name,
+      service.serviceId,
       service.image || "",
       service.category,
       service.priceFrom,
@@ -221,6 +235,7 @@ async function resolveProvider(providerId: string): Promise<ResolvedProvider | n
     if (vendor) {
       return resolveServicePricing(
         vendor.businessName || vendor.name,
+        String(vendor._id),
         vendor.profileImage || (Array.isArray(vendor.images) ? vendor.images[0] : "") || "",
         vendor.category,
         vendor.priceFrom,
@@ -329,6 +344,7 @@ export async function quoteBooking(providerId: string, req: QuoteRequest): Promi
     advancePercentage: provider.advancePercentage,
     expectedBookingType: provider.expectedBookingType,
     providerName: provider.name,
+    canonicalProviderId: provider.canonicalId,
     providerImage: provider.image,
     providerKind: provider.kind,
     minGuests: provider.minGuests,

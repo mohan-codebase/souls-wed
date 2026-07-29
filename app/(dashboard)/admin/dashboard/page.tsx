@@ -528,13 +528,13 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteReview = (vendorId: string, reviewId: string) => {
+  const handleDeleteReview = (vendorId: string, reviewId: string, sourceType?: string) => {
     setConfirmDialog({
       title: "Delete this review?",
       desc: "This review will be permanently removed from the vendor profile.",
       onConfirm: async () => {
         try {
-          const res = await fetch(`/api/admin/reviews?vendorId=${vendorId}&reviewId=${reviewId}`, {
+          const res = await fetch(`/api/admin/reviews?vendorId=${vendorId}&reviewId=${reviewId}${sourceType ? `&sourceType=${sourceType}` : ""}`, {
             method: "DELETE",
           });
           if (res.ok) {
@@ -2172,7 +2172,7 @@ export default function AdminDashboard() {
                               <td className="p-4 text-stone-500 font-semibold">{formatDate(r.date)}</td>
                               <td className="p-4 text-center">
                                 <button
-                                  onClick={() => handleDeleteReview(r.vendorId, r.reviewId)}
+                                  onClick={() => handleDeleteReview(r.vendorId, r.reviewId, r.sourceType)}
                                   title="Delete review"
                                   className={`p-2 rounded-xl transition-colors cursor-pointer ${isDarkMode ? "text-stone-500 hover:text-red-400 hover:bg-red-500/10" : "text-stone-400 hover:text-red-600 hover:bg-red-50"}`}
                                 >

@@ -2,6 +2,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Venue } from "@/lib/models/Venue";
 import { Booking } from "@/lib/models/Booking";
 import { NextResponse } from "next/server";
+import { canUserReview } from "@/lib/booking-lifecycle";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
@@ -71,5 +72,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to submit review.";
     return NextResponse.json({ message }, { status: 500 });
+  }
+}
+
+
+/**
+ * GET — may the current user review this listing?
+ *
+ * The "Write a Review" button used to be shown to everyone, so most people who
+ * clicked it hit a 403 from the POST handler. The UI now asks first.
+ */
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+    const result = await canUserReview(session.userId ?? "", id);
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    console.error("Review eligibility error:", error);
+    // Fail closed — hiding the button is better than promising a 403.
+    return NextResponse.json({ canReview: false, reason: "" });
   }
 }

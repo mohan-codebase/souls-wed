@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Star, BadgeCheck, Image as ImageIcon, PenSquare, Share2 } from "lucide-react";
 import { MapPinIcon } from "@/components/ui/map-pin";
@@ -21,6 +21,31 @@ interface VendorHeroProps {
 
 export default function VendorHero({ vendor, photoCount, onReviewSubmitted }: VendorHeroProps) {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  // "Write a Review" used to be shown to everyone, but the POST handler only
+  // accepts a review from someone with a COMPLETED booking here — so for almost
+  // every visitor the button led straight to a 403. Ask first, and only offer
+  // it to people who can actually use it.
+  const [canReview, setCanReview] = useState(false);
+  const [reviewBlockedReason, setReviewBlockedReason] = useState("");
+
+  useEffect(() => {
+    if (!vendor._id) return;
+    let cancelled = false;
+    fetch(`/api/vendors/${vendor._id}/reviews`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        setCanReview(Boolean(d?.canReview));
+        setReviewBlockedReason(d?.reason || "");
+      })
+      .catch(() => {
+        if (!cancelled) setCanReview(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vendor._id]);
   const { items, addItem, removeItem } = useWishlistStore();
   const isSaved = items.some((item) => item.id === vendor._id);
 
@@ -160,13 +185,23 @@ export default function VendorHero({ vendor, photoCount, onReviewSubmitted }: Ve
           <HeartIcon className="w-4 h-4" fill={isSaved ? "currentColor" : "none"} />
           {isSaved ? "Saved" : "Shortlist"}
         </button>
-        <button
-          onClick={() => setReviewModalOpen(true)}
-          className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:opacity-70 transition-opacity"
-        >
-          <PenSquare className="w-4 h-4" />
-          Write a Review
-        </button>
+        {canReview ? (
+          <button
+            onClick={() => setReviewModalOpen(true)}
+            className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:opacity-70 transition-opacity"
+          >
+            <PenSquare className="w-4 h-4" />
+            Write a Review
+          </button>
+        ) : reviewBlockedReason ? (
+          <span
+            title={reviewBlockedReason}
+            className="flex items-center gap-2 text-sm font-semibold text-slate-300 cursor-not-allowed"
+          >
+            <PenSquare className="w-4 h-4" />
+            Write a Review
+          </span>
+        ) : null}
         <button
           onClick={handleShare}
           className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:opacity-70 transition-opacity"

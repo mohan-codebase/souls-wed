@@ -195,7 +195,87 @@ Atlas cluster.
 - The login page still posts `email`/`role` to `verify-2fa`; the server ignores
   them. Harmless, but worth tidying when that file is next touched.
 
-**Still open:** #11–#14, and the P3 list below.
+---
+
+## Fix log 4 — orphaned bookings and the review pipeline
+
+**Fixed: #13, #14** — plus a review-moderation bug that only became visible once
+reviews could exist at all.
+
+### #13 — the orphans, and why they mattered more than reported
+
+The root cause turned out to be specific and fixable: the six seeded bookings
+store the venue's **MongoDB `_id`** as `providerId` (`6a5b9aa2fe9eb47c17b765fd`)
+instead of the `venueId` slug (`venue-refinery-1`). Same venue, two spellings.
+
+The original report called this a data-integrity issue. It's worse than that —
+it's a **double-booking hole**, demonstrated live:
+
+```
+legacy booking:            providerId 6a5b9aa2…765fd, event 2026-08-23
+availability by _id:       blockedDates ["2026-08-23"]
+availability by slug:      blockedDates []          ← public calendar shows it FREE
+```
+
+The conflict check in `POST /api/bookings` matches `providerId` as an exact
+string, so a booking stored under one spelling never conflicts with one stored
+under the other. That date could be sold twice.
+
+| Change | Files |
+|---|---|
+| `quoteBooking()` now returns `canonicalProviderId`, and booking creation persists **that** rather than whatever the client sent. New orphans are impossible. | `lib/pricing.ts`, `app/api/bookings/route.ts` |
+| Pricing moved **before** the conflict check, so conflicts are tested against the canonical id. Previously the check ran on the raw client value. | `app/api/bookings/route.ts` |
+| Repair script for the existing six: resolves by listing `_id`, then by unique name, and reports anything it can't resolve rather than guessing. | `scripts/repair-orphaned-booking-providers.mjs` (new) |
+
+Verified: posting a booking with the raw ObjectId now stores
+`providerId: "venue-refinery-1"`, the slug calendar reflects it, and a duplicate
+booked via the slug is correctly refused with 409.
+
+### #14 — `completed` is reachable, so reviews work
+
+| Change | Files |
+|---|---|
+| Confirmed + paid bookings whose event has passed transition to `completed` automatically. Runs opportunistically when a booking list is read (the project has no scheduler), throttled to once a minute per process, as one `updateMany`. | `lib/booking-lifecycle.ts` (new), `app/api/bookings/route.ts`, `app/api/admin/bookings/route.ts` |
+| `GET` eligibility endpoint on both review routes; "Write a Review" is now only offered to people who can actually use it, with the reason as a tooltip otherwise. | `app/api/venues/[id]/reviews/route.ts`, `app/api/vendors/[id]/reviews/route.ts`, `VenueHero.tsx`, `VendorHero.tsx` |
+
+Only **paid** bookings are eligible to complete — completion unlocks reviews and
+feeds the payout ledger, so an unpaid booking must not drift into it.
+
+### Bonus: the moderation queue could never see a review
+
+Making reviews possible exposed the next link in the chain.
+`GET /api/admin/reviews` read `Vendor.reviews` only — but customer reviews are
+written to `Venue.reviews` and `ServiceListing.reviews`. I submitted a review,
+confirmed it on the venue, and the admin panel still reported zero. It now
+aggregates all three sources, tags each with `sourceType`, and `DELETE` uses that
+to find the review again (falling back to trying each collection).
+
+### Verified end to end
+
+| Check | Result |
+|---|---|
+| Booking posted with a raw ObjectId | Stored as `venue-refinery-1`, image backfilled |
+| Duplicate of that date via the slug | **409** — conflict now detected |
+| Paid booking with a past event date | Auto-transitions `confirmed → completed` |
+| Review eligibility before / after | `false` → **`true`** |
+| Submitting a review | **201**, venue rating 5.0, count 1 |
+| Submitting a second for the same booking | **409** |
+| Admin moderation queue | **1 review visible** (was 0) |
+| Deleting it as admin | 200, venue rating recalculated to 0 |
+
+All test data removed; DB verified back to 6 bookings.
+
+### ⚠ Action required
+
+```bash
+node scripts/repair-orphaned-booking-providers.mjs           # preview
+node scripts/repair-orphaned-booking-providers.mjs --apply   # write
+```
+
+Until this runs, the six legacy bookings still hold dates that the public
+calendar shows as free.
+
+**Still open:** #11 (vendor earnings view) and the P3 list below.
 
 ---
 

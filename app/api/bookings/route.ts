@@ -33,6 +33,7 @@ import {
   getVendorBlockedDates,
 } from "@/lib/booking-access";
 import { sendBookingCreatedEmails, dispatch } from "@/lib/mail";
+import { settleCompletedBookings } from "@/lib/booking-lifecycle";
 
 /**
  * How far the client's displayed price may drift from the server's before we
@@ -117,72 +118,13 @@ export async function POST(req: Request) {
       );
     }
 
-    // ─── Step 4: Check for conflicts ───
-    // Make sure the requested date(s) aren't already booked
-    await connectDB();
-
-    let conflictQuery: Record<string, unknown> = {
-      providerId,
-      status: { $in: ["pending", "confirmed"] },
-    };
-
-    if (bookingType === "room") {
-      // A room range conflicts if: existing.checkIn < new.checkOut AND existing.checkOut > new.checkIn
-      conflictQuery.bookingType = "room";
-      conflictQuery.checkIn = { $lt: new Date(checkOut) };
-      conflictQuery.checkOut = { $gt: new Date(checkIn) };
-    } else {
-      const datesAsObjects = eventDates.map((d: string) => new Date(d));
-      conflictQuery.$or = [
-        { eventDate: { $in: datesAsObjects } },
-        { eventDates: { $in: datesAsObjects } }
-      ];
-    }
-
-
-    const existingBooking = await Booking.findOne(conflictQuery);
-    if (existingBooking) {
-      return NextResponse.json(
-        { message: "This date is already booked. Please select a different date." },
-        { status: 409 }
-      );
-    }
-
-    // Also check the vendor's own unavailableDates (days blocked outside the
-    // platform). This previously did Vendor.findById(providerId) — but
-    // providerId is a venue slug or service id, so it always threw a CastError
-    // that the catch swallowed, and blocked dates were never enforced.
-    const blockedDates = await getVendorBlockedDates(providerId);
-    if (blockedDates.length) {
-      const blocked = new Set(blockedDates);
-
-      const requestedDates: string[] = [];
-      if (bookingType === "room") {
-        const currentDate = new Date(checkIn);
-        const endDate = new Date(checkOut);
-        while (currentDate <= endDate) {
-          requestedDates.push(currentDate.toISOString().split("T")[0]);
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
-      } else {
-        requestedDates.push(
-          ...eventDates.map((d: string) => new Date(d).toISOString().split("T")[0])
-        );
-      }
-
-      if (requestedDates.some((d) => blocked.has(d))) {
-        return NextResponse.json(
-          { message: "This date is unavailable. Please select a different date." },
-          { status: 409 }
-        );
-      }
-    }
-
-    // ─── Step 5: Price the booking SERVER-SIDE ───
+    // ─── Step 4: Price the booking SERVER-SIDE ───
     //
     // Everything above this line came from the client and is untrusted.
     // quoteBooking() re-derives the price from the listing in MongoDB, so a
     // tampered `totalAmount` can't get anyone a ₹1,44,000 venue for ₹1.
+    await connectDB();
+
     let quote;
     try {
       quote = await quoteBooking(providerId, {
@@ -224,6 +166,72 @@ export async function POST(req: Request) {
       );
     }
 
+    // ─── Step 5: Check for conflicts ───
+    //
+    // Uses the CANONICAL id from the quote, not the raw client value. The same
+    // venue is reachable by both its `_id` and its `venueId` slug, and this
+    // query matches providerId as an exact string — so with the un-normalised
+    // id, a booking spelled one way would not conflict with one spelled the
+    // other, and the same date could be sold twice.
+    const canonicalProviderId = quote.canonicalProviderId || providerId;
+
+    const conflictQuery: Record<string, unknown> = {
+      providerId: canonicalProviderId,
+      status: { $in: ["pending", "confirmed"] },
+    };
+
+    if (bookingType === "room") {
+      // A room range conflicts if: existing.checkIn < new.checkOut AND existing.checkOut > new.checkIn
+      conflictQuery.bookingType = "room";
+      conflictQuery.checkIn = { $lt: new Date(checkOut) };
+      conflictQuery.checkOut = { $gt: new Date(checkIn) };
+    } else {
+      const datesAsObjects = eventDates.map((d: string) => new Date(d));
+      conflictQuery.$or = [
+        { eventDate: { $in: datesAsObjects } },
+        { eventDates: { $in: datesAsObjects } }
+      ];
+    }
+
+
+    const existingBooking = await Booking.findOne(conflictQuery);
+    if (existingBooking) {
+      return NextResponse.json(
+        { message: "This date is already booked. Please select a different date." },
+        { status: 409 }
+      );
+    }
+
+    // Also check the vendor's own unavailableDates (days blocked outside the
+    // platform). This previously did Vendor.findById(providerId) — but
+    // providerId is a venue slug or service id, so it always threw a CastError
+    // that the catch swallowed, and blocked dates were never enforced.
+    const blockedDates = await getVendorBlockedDates(canonicalProviderId);
+    if (blockedDates.length) {
+      const blocked = new Set(blockedDates);
+
+      const requestedDates: string[] = [];
+      if (bookingType === "room") {
+        const currentDate = new Date(checkIn);
+        const endDate = new Date(checkOut);
+        while (currentDate <= endDate) {
+          requestedDates.push(currentDate.toISOString().split("T")[0]);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } else {
+        requestedDates.push(
+          ...eventDates.map((d: string) => new Date(d).toISOString().split("T")[0])
+        );
+      }
+
+      if (requestedDates.some((d) => blocked.has(d))) {
+        return NextResponse.json(
+          { message: "This date is unavailable. Please select a different date." },
+          { status: 409 }
+        );
+      }
+    }
+
     const finalTotalAmount = quote.totalAmount;
     const advanceAmount = quote.advanceAmount;
 
@@ -233,7 +241,12 @@ export async function POST(req: Request) {
       userName: userName || session.name || "Guest",
       userEmail: session.email,
       userPhone: userPhone || "",
-      providerId,
+      // Store the CANONICAL id (venueId / serviceId), not whatever the client
+      // sent. A listing is reachable by several ids — seed data used a Venue's
+      // raw _id — and the double-booking check compares providerId as an exact
+      // string, so two spellings of the same venue would not conflict with each
+      // other. Normalising on write makes that class of orphan impossible.
+      providerId: quote.canonicalProviderId || providerId,
       // Use the name from the DB, not the client's — otherwise a booking can be
       // filed against one listing while displaying another listing's name.
       providerName: quote.providerName || providerName,
@@ -311,6 +324,10 @@ export async function GET() {
     }
 
     await connectDB();
+
+    // Opportunistically finish any booking whose event has passed, so
+    // "completed" is reachable without a scheduler. Throttled internally.
+    await settleCompletedBookings();
 
     // Users see bookings they made. Vendors see bookings received — either
     // against their own account id (service vendors) or against a venue they

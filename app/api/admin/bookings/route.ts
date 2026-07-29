@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
 import { getVendorEmailForProvider } from "@/lib/booking-access";
+import { settleCompletedBookings } from "@/lib/booking-lifecycle";
 import {
   sendBookingConfirmedEmails,
   sendBookingCancelledEmails,
@@ -29,6 +30,7 @@ export async function GET() {
     }
 
     await connectDB();
+    await settleCompletedBookings();
     const bookings = await Booking.find({}).sort({ createdAt: -1 });
     return NextResponse.json({ success: true, bookings });
   } catch (error: unknown) {
