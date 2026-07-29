@@ -228,6 +228,12 @@ export default function BookingForm({
           checkOut: bookingType === "room" ? checkOut : undefined,
           guestCount: bookingType === "venue" ? guestCount : undefined,
           roomCount: bookingType === "room" ? roomCount : undefined,
+          hours: bookingType !== "venue" && bookingType !== "room" ? hours : undefined,
+          // The server re-prices the booking from the database and needs to know
+          // which menu was picked; without it a non-veg selection would be
+          // priced as veg and the totals would disagree. See lib/pricing.ts.
+          menuType: bookingType === "venue" ? menuType : undefined,
+          // Advisory only — the server recalculates and rejects a mismatch.
           totalAmount: priceBreakdown.total,
           advanceAmount: priceBreakdown.advance,
           currency,

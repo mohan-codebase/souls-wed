@@ -26,9 +26,15 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
+import { quoteBooking, PricingError } from "@/lib/pricing";
 
-// ─── Advance percentage ───
-const ADVANCE_PERCENTAGE = 0.3; // 30%
+/**
+ * How far the client's displayed price may drift from the server's before we
+ * reject the booking. Zero tolerance would be ideal, but a ₹1 allowance absorbs
+ * float/rounding differences between the browser and Node without opening a gap
+ * an attacker could drive anything through.
+ */
+const PRICE_TOLERANCE_INR = 1;
 
 // ════════════════════════════════════════════════════════════
 // POST — Create a new booking
@@ -61,17 +67,22 @@ export async function POST(req: Request) {
       checkOut,
       guestCount,
       roomCount,
+      hours,
+      menuType,
       totalAmount,
       functionType,
       functionTime,
       specialRequests,
       notifyWhatsapp,
+      userName,
       userPhone,
       currency,
     } = body;
 
     // ─── Step 3: Validate required fields ───
-    if (!providerId || !providerName || !bookingType || !totalAmount) {
+    // NOTE: `totalAmount` is deliberately NOT required here — it is advisory
+    // only. The real figure comes from quoteBooking() in Step 4.5.
+    if (!providerId || !providerName || !bookingType) {
       return NextResponse.json(
         { message: "Missing required booking fields." },
         { status: 400 }
@@ -162,17 +173,65 @@ export async function POST(req: Request) {
       // providerId might be a static venue string id, not an ObjectId — ignore
     }
 
-    // ─── Step 5: Calculate advance amount ───
-    const advanceAmount = Math.round(totalAmount * ADVANCE_PERCENTAGE);
+    // ─── Step 5: Price the booking SERVER-SIDE ───
+    //
+    // Everything above this line came from the client and is untrusted.
+    // quoteBooking() re-derives the price from the listing in MongoDB, so a
+    // tampered `totalAmount` can't get anyone a ₹1,44,000 venue for ₹1.
+    let quote;
+    try {
+      quote = await quoteBooking(providerId, {
+        bookingType,
+        guestCount,
+        roomCount,
+        hours,
+        menuType,
+        eventDates,
+        checkIn,
+        checkOut,
+      });
+    } catch (err) {
+      if (err instanceof PricingError) {
+        return NextResponse.json({ message: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+
+    // If the browser showed the customer a different number than we just
+    // calculated, something is out of sync (or being tampered with). Fail
+    // rather than silently charging a price they never agreed to.
+    const clientTotal = Number(totalAmount);
+    if (
+      Number.isFinite(clientTotal) &&
+      clientTotal > 0 &&
+      Math.abs(clientTotal - quote.totalAmount) > PRICE_TOLERANCE_INR
+    ) {
+      console.warn(
+        `[pricing] mismatch on ${providerId}: client=${clientTotal} server=${quote.totalAmount} user=${session.userId}`
+      );
+      return NextResponse.json(
+        {
+          message:
+            "The price changed while you were booking. Please refresh the page and try again.",
+          expectedAmount: quote.totalAmount,
+        },
+        { status: 409 }
+      );
+    }
+
+    const finalTotalAmount = quote.totalAmount;
+    const advanceAmount = quote.advanceAmount;
 
     // ─── Step 6: Create the booking ───
     const newBooking = new Booking({
       userId: session.userId,
-      userName: session.name,
+      userName: userName || session.name || "Guest",
       userEmail: session.email,
       userPhone: userPhone || "",
       providerId,
-      providerName,
+      // Use the name from the DB, not the client's — otherwise a booking can be
+      // filed against one listing while displaying another listing's name.
+      providerName: quote.providerName || providerName,
       bookingType,
       eventDates: bookingType !== "room" ? eventDates.map((d: string) => new Date(d)) : undefined,
       eventDate: bookingType !== "room" && eventDates.length > 0 ? new Date(eventDates[0]) : undefined,
@@ -180,9 +239,13 @@ export async function POST(req: Request) {
       checkOut: bookingType === "room" ? new Date(checkOut) : undefined,
       guestCount,
       roomCount,
-      totalAmount,
+      totalAmount: finalTotalAmount,
       advanceAmount,
       status: "pending",
+      // A new booking has never been paid. Only verify-payment, the Stripe
+      // webhook, or an explicit admin offline-payment action may change this.
+      paymentStatus: "unpaid",
+      amountPaid: 0,
       functionType,
       functionTime,
       specialRequests,

@@ -34,22 +34,28 @@ export async function GET() {
       Admin.countDocuments(),
     ]);
 
-    // 4. Calculate total revenue (sum of advanceAmount for confirmed/completed bookings)
+    // 4. Calculate total revenue — money we ACTUALLY collected.
+    //
+    // This used to sum `advanceAmount` for any booking whose status happened to
+    // be confirmed/completed. Because an admin can set status by hand, marking
+    // an unpaid booking "Confirmed" invented revenue out of nothing. Revenue is
+    // now the sum of `amountPaid` on bookings Stripe (or a recorded offline
+    // payment) confirmed as paid.
     const revenueResult = await Booking.aggregate([
-      {
-        $match: {
-          status: { $in: ["confirmed", "completed"] },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$advanceAmount" },
-        },
-      },
+      { $match: { paymentStatus: "paid" } },
+      { $group: { _id: null, total: { $sum: "$amountPaid" } } },
     ]);
 
     const totalRevenue = revenueResult[0]?.total || 0;
+
+    // Surfaced separately so the dashboard can show committed-but-uncollected
+    // value without mixing it into revenue.
+    const pendingResult = await Booking.aggregate([
+      { $match: { paymentStatus: { $ne: "paid" }, status: { $ne: "cancelled" } } },
+      { $group: { _id: null, total: { $sum: "$advanceAmount" } } },
+    ]);
+
+    const pendingRevenue = pendingResult[0]?.total || 0;
 
     return NextResponse.json({
       success: true,
@@ -59,6 +65,7 @@ export async function GET() {
         totalBookings,
         totalAdmins,
         totalRevenue,
+        pendingRevenue,
       },
     });
   } catch (error: unknown) {

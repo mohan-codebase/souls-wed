@@ -33,12 +33,22 @@ export async function POST(req: Request) {
       if (bookingId) {
         await connectDB();
         const booking = await Booking.findById(bookingId);
-        
-        if (booking && booking.status !== "confirmed") {
+
+        // The webhook is signature-verified, so this is our most trustworthy
+        // signal that money moved — but only act on a session Stripe reports
+        // as actually paid. `checkout.session.completed` also fires for
+        // unpaid/async payment methods.
+        if (booking && session.payment_status === "paid" && booking.paymentStatus !== "paid") {
           booking.status = "confirmed";
           booking.stripeSessionId = session.id;
+          booking.paymentStatus = "paid";
+          booking.amountPaid = (session.amount_total ?? 0) / 100;
+          booking.paidAt = new Date();
+          booking.paidMethod = "stripe";
           await booking.save();
-          console.log(`Booking ${bookingId} confirmed via Stripe Webhook`);
+          console.log(
+            `Booking ${bookingId} confirmed via Stripe webhook (${booking.amountPaid} ${booking.currency})`
+          );
         }
       }
     }

@@ -93,6 +93,48 @@ const BookingSchema = new Schema({
     default: "pending",
   },
 
+  // ─── PAYMENT STATE (separate from `status` on purpose) ────
+  //
+  // `status` is the FULFILMENT lifecycle — it answers "is this booking on?".
+  // `paymentStatus` + `amountPaid` are the MONEY record — they answer
+  // "has the customer actually paid, and how much?".
+  //
+  // These MUST stay separate. They used to be conflated: an admin flipping
+  // `status` to "confirmed" caused the booking's `advanceAmount` to be counted
+  // as platform revenue and queued as a vendor payout, even when the customer
+  // had never been near Stripe. Revenue and payouts now read `amountPaid`
+  // where `paymentStatus === "paid"` — never `advanceAmount`.
+  //
+  // Only three things may write these fields:
+  //   1. POST /api/bookings/verify-payment  (Stripe redirect, amount-checked)
+  //   2. POST /api/webhooks/stripe          (signed webhook — source of truth)
+  //   3. An explicit admin "record offline payment" action, which stamps
+  //      paidMethod: "offline" plus who recorded it.
+  paymentStatus: {
+    type: String,
+    enum: ["unpaid", "paid", "refunded"],
+    default: "unpaid",
+    index: true,
+  },
+  // Amount actually collected, in the booking's currency. Never assume this
+  // equals advanceAmount — a partial or offline payment may differ.
+  amountPaid: { type: Number, default: 0 },
+  paidAt: { type: Date },
+  paidMethod: {
+    type: String,
+    enum: ["stripe", "offline"],
+  },
+  // Audit trail for offline payments: which admin recorded it, and why.
+  paidRecordedBy: { type: String, default: "" },
+  paidNote: { type: String, default: "" },
+
+  payoutStatus: {
+    type: String,
+    enum: ["pending", "released"],
+    default: "pending",
+  },
+  payoutRef: { type: String, default: "" },
+
   // ─── PAYMENT (Stripe) ─────────────────────────────────────
   // stripeSessionId: set by create-order, verified by verify-payment
   stripeSessionId: { type: String },
