@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { Vendor } from "@/lib/models/Vendor";
 import { validatePhone } from "@/lib/auth";
-import { sendLoginNotificationEmail } from "@/lib/mail";
+import { sendLoginNotificationEmail, dispatch } from "@/lib/mail";
 import { describeDevice } from "@/lib/device";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
 
     pending.destroy();
 
-    await sendLoginNotificationEmail(vendor.email, vendor.name, "vendor", userAgent);
+    dispatch(sendLoginNotificationEmail(vendor.email, vendor.name, "vendor", userAgent), "login-notification (google)");
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

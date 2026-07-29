@@ -256,3 +256,292 @@ export async function sendSubscriberNotificationEmail(email: string) {
     console.error("Error sending subscriber notification email:", error);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOOKING NOTIFICATIONS
+//
+// Until these existed, a booking generated no email whatsoever — the customer
+// got no confirmation, the vendor was never told a lead had arrived, and the
+// admin inbox stayed silent. The only way anyone found out was by logging in
+// and looking. See AUDIT-REPORT.md #4.
+//
+// Every function here is safe to call fire-and-forget (see `dispatch` below).
+// They swallow their own errors: a booking must never fail because SMTP is
+// slow or down.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Shape we need off a Booking document to render an email. */
+export interface BookingEmailData {
+  _id: unknown;
+  // Mongoose hands back `null` for unset optional fields, so every one of
+  // these is nullable — otherwise callers have to launder `booking.toObject()`
+  // through a cast at each call site.
+  userName?: string | null;
+  userEmail?: string | null;
+  userPhone?: string | null;
+  providerName?: string | null;
+  bookingType?: string | null;
+  eventDate?: Date | string | null;
+  eventDates?: (Date | string)[] | null;
+  checkIn?: Date | string | null;
+  checkOut?: Date | string | null;
+  guestCount?: number | null;
+  roomCount?: number | null;
+  totalAmount?: number | null;
+  advanceAmount?: number | null;
+  amountPaid?: number | null;
+  currency?: string | null;
+  functionType?: string | null;
+  specialRequests?: string | null;
+  cancellationReason?: string | null;
+  cancelledBy?: string | null;
+}
+
+const adminInbox = () => process.env.UPLOAD_NOTIFY_EMAIL || "soulswed99@gmail.com";
+const siteUrl = () => process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+function smtpReady(context: string): boolean {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.warn(`SMTP credentials are not fully configured. Skipping ${context}.`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Fire-and-forget an email. Callers use this so a slow SMTP server never holds
+ * up an HTTP response — the same mistake that made every login take 10-15s.
+ */
+export function dispatch(task: Promise<unknown>, label: string): void {
+  void task.catch((err) => console.error(`[mail] ${label} failed:`, err));
+}
+
+const money = (amount?: number | null, currency?: string | null) => {
+  amount = amount ?? 0;
+  currency = currency || "INR";
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: currency || "INR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount}`;
+  }
+};
+
+const day = (d?: Date | string | null) =>
+  d
+    ? new Date(d).toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "";
+
+/** Human-readable dates line, whatever kind of booking it is. */
+function datesLabel(b: BookingEmailData): string {
+  if (b.bookingType === "room" && b.checkIn && b.checkOut) {
+    return `${day(b.checkIn)} → ${day(b.checkOut)}`;
+  }
+  if (b.eventDates?.length) return b.eventDates.map(day).join(", ");
+  return day(b.eventDate);
+}
+
+const ref = (b: BookingEmailData) => String(b._id).slice(-8).toUpperCase();
+
+/** The grey detail panel shared by all booking emails. */
+function detailsPanel(b: BookingEmailData): string {
+  const rows: [string, string][] = [
+    ["Reference", ref(b)],
+    ["Booking", b.providerName || "—"],
+    ["Dates", datesLabel(b)],
+  ];
+  if (b.guestCount) rows.push(["Guests", String(b.guestCount)]);
+  if (b.roomCount) rows.push(["Rooms", String(b.roomCount)]);
+  if (b.functionType) rows.push(["Occasion", b.functionType]);
+  rows.push(["Total", money(b.totalAmount, b.currency)]);
+
+  return `
+    <div style="background-color:#f8f9fa;padding:15px;border-radius:5px;margin:20px 0;border-left:4px solid #FCCB11;">
+      ${rows
+        .map(
+          ([k, v]) =>
+            `<p style="margin:5px 0;color:#1A1A1A;"><strong>${k}:</strong> ${v}</p>`
+        )
+        .join("")}
+    </div>`;
+}
+
+function shell(heading: string, body: string): string {
+  return `
+    <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;border:1px solid #DEE2E6;border-radius:8px;">
+      <h2 style="color:#EE7429;margin-top:0;">${heading}</h2>
+      ${body}
+      <br>
+      <p style="color:#4a4a4a;line-height:1.5;">Best regards,<br><strong style="color:#1A1A1A;">SoulsWed</strong></p>
+    </div>`;
+}
+
+async function send(to: string, subject: string, html: string, label: string) {
+  const info = await transporter.sendMail({
+    from: `"${process.env.SMTP_FROM_NAME || "SoulsWed"}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+    to,
+    subject,
+    html,
+  });
+  console.log("%s sent to %s, messageId: %s", label, to, info.messageId);
+}
+
+/**
+ * A booking has just been created and is awaiting payment.
+ * Goes to the customer, the vendor (if we can resolve their address), and admin.
+ */
+export async function sendBookingCreatedEmails(b: BookingEmailData, vendorEmail?: string) {
+  if (!smtpReady("booking-created notifications")) return;
+
+  const payUrl = `${siteUrl()}/checkout/${String(b._id)}`;
+
+  try {
+    if (b.userEmail) {
+      await send(
+        b.userEmail,
+        `Booking request received — ${b.providerName}`,
+        shell(
+          "We've got your booking request",
+          `<p style="color:#1A1A1A;font-size:16px;">Hello ${b.userName || "there"},</p>
+           <p style="color:#4a4a4a;line-height:1.5;">Your request for <strong>${b.providerName}</strong> is in. It isn't confirmed yet — the dates are held for you until the advance is paid.</p>
+           ${detailsPanel(b)}
+           <p style="color:#4a4a4a;line-height:1.5;">Advance to confirm: <strong>${money(b.advanceAmount, b.currency)}</strong>. The balance is settled directly with the venue.</p>
+           <p style="margin:25px 0;"><a href="${payUrl}" style="background-color:#EE7429;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:bold;display:inline-block;">Pay advance &amp; confirm</a></p>`
+        ),
+        "Booking created (customer)"
+      );
+    }
+
+    if (vendorEmail) {
+      await send(
+        vendorEmail,
+        `New booking request — ${b.providerName} (${datesLabel(b)})`,
+        shell(
+          "You have a new booking request",
+          `<p style="color:#4a4a4a;line-height:1.5;">A customer has requested <strong>${b.providerName}</strong>. It's awaiting their advance payment — we'll email you again the moment it's confirmed.</p>
+           ${detailsPanel(b)}
+           <div style="background-color:#fff8f0;padding:15px;border-radius:5px;margin:20px 0;border-left:4px solid #EE7429;">
+             <p style="margin:5px 0;color:#1A1A1A;"><strong>Customer:</strong> ${b.userName || "—"}</p>
+             <p style="margin:5px 0;color:#1A1A1A;"><strong>Phone:</strong> ${b.userPhone || "—"}</p>
+             <p style="margin:5px 0;color:#1A1A1A;"><strong>Email:</strong> ${b.userEmail || "—"}</p>
+           </div>
+           ${b.specialRequests ? `<p style="color:#4a4a4a;line-height:1.5;"><strong>Special requests:</strong><br>${b.specialRequests}</p>` : ""}
+           <p style="margin:25px 0;"><a href="${siteUrl()}/vendor/dashboard" style="background-color:#EE7429;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:bold;display:inline-block;">Open partner portal</a></p>`
+        ),
+        "Booking created (vendor)"
+      );
+    }
+
+    await send(
+      adminInbox(),
+      `New booking ${ref(b)} — ${b.providerName}`,
+      shell(
+        "New booking created",
+        `<p style="color:#4a4a4a;line-height:1.5;">Awaiting payment of ${money(b.advanceAmount, b.currency)}.</p>
+         ${detailsPanel(b)}
+         <p style="color:#4a4a4a;line-height:1.5;">Customer: ${b.userName} · ${b.userEmail} · ${b.userPhone || "no phone"}</p>`
+      ),
+      "Booking created (admin)"
+    );
+  } catch (error) {
+    console.error("Error sending booking-created emails:", error);
+  }
+}
+
+/** Payment received — the booking is now locked in. Customer + vendor. */
+export async function sendBookingConfirmedEmails(b: BookingEmailData, vendorEmail?: string) {
+  if (!smtpReady("booking-confirmed notifications")) return;
+
+  const balance = Math.max(0, (b.totalAmount || 0) - (b.amountPaid || 0));
+
+  try {
+    if (b.userEmail) {
+      await send(
+        b.userEmail,
+        `Booking confirmed — ${b.providerName}`,
+        shell(
+          "Your booking is confirmed",
+          `<p style="color:#1A1A1A;font-size:16px;">Hello ${b.userName || "there"},</p>
+           <p style="color:#4a4a4a;line-height:1.5;">Payment received — <strong>${b.providerName}</strong> is confirmed for you.</p>
+           ${detailsPanel(b)}
+           <div style="background-color:#f0fdf4;padding:15px;border-radius:5px;margin:20px 0;border-left:4px solid #16a34a;">
+             <p style="margin:5px 0;color:#1A1A1A;"><strong>Paid:</strong> ${money(b.amountPaid, b.currency)}</p>
+             ${balance > 0 ? `<p style="margin:5px 0;color:#1A1A1A;"><strong>Balance at venue:</strong> ${money(balance, b.currency)}</p>` : ""}
+           </div>
+           <p style="color:#4a4a4a;line-height:1.5;">Keep reference <strong>${ref(b)}</strong> handy when you speak to the venue.</p>`
+        ),
+        "Booking confirmed (customer)"
+      );
+    }
+
+    if (vendorEmail) {
+      await send(
+        vendorEmail,
+        `Booking CONFIRMED — ${b.providerName} (${datesLabel(b)})`,
+        shell(
+          "A booking has been confirmed",
+          `<p style="color:#4a4a4a;line-height:1.5;">The customer has paid their advance. Please block these dates.</p>
+           ${detailsPanel(b)}
+           <div style="background-color:#fff8f0;padding:15px;border-radius:5px;margin:20px 0;border-left:4px solid #EE7429;">
+             <p style="margin:5px 0;color:#1A1A1A;"><strong>Customer:</strong> ${b.userName || "—"}</p>
+             <p style="margin:5px 0;color:#1A1A1A;"><strong>Phone:</strong> ${b.userPhone || "—"}</p>
+             <p style="margin:5px 0;color:#1A1A1A;"><strong>Balance to collect at venue:</strong> ${money(balance, b.currency)}</p>
+           </div>`
+        ),
+        "Booking confirmed (vendor)"
+      );
+    }
+  } catch (error) {
+    console.error("Error sending booking-confirmed emails:", error);
+  }
+}
+
+/** Booking cancelled or declined. Customer + vendor, with the reason. */
+export async function sendBookingCancelledEmails(b: BookingEmailData, vendorEmail?: string) {
+  if (!smtpReady("booking-cancelled notifications")) return;
+
+  const by = b.cancelledBy === "vendor" ? "the venue" : b.cancelledBy === "admin" ? "SoulsWed" : "you";
+  const refund = b.amountPaid || 0;
+
+  try {
+    if (b.userEmail) {
+      await send(
+        b.userEmail,
+        `Booking cancelled — ${b.providerName}`,
+        shell(
+          "Your booking has been cancelled",
+          `<p style="color:#1A1A1A;font-size:16px;">Hello ${b.userName || "there"},</p>
+           <p style="color:#4a4a4a;line-height:1.5;">Booking <strong>${ref(b)}</strong> for <strong>${b.providerName}</strong> was cancelled by ${by}.</p>
+           ${b.cancellationReason ? `<p style="color:#4a4a4a;line-height:1.5;"><strong>Reason:</strong> ${b.cancellationReason}</p>` : ""}
+           ${detailsPanel(b)}
+           ${refund > 0 ? `<p style="color:#4a4a4a;line-height:1.5;">A refund of <strong>${money(refund, b.currency)}</strong> is being processed and will reach your original payment method.</p>` : ""}`
+        ),
+        "Booking cancelled (customer)"
+      );
+    }
+
+    if (vendorEmail) {
+      await send(
+        vendorEmail,
+        `Booking cancelled — ${b.providerName} (${datesLabel(b)})`,
+        shell(
+          "A booking was cancelled",
+          `<p style="color:#4a4a4a;line-height:1.5;">Booking <strong>${ref(b)}</strong> was cancelled by ${by}. These dates are now available again.</p>
+           ${b.cancellationReason ? `<p style="color:#4a4a4a;line-height:1.5;"><strong>Reason:</strong> ${b.cancellationReason}</p>` : ""}
+           ${detailsPanel(b)}`
+        ),
+        "Booking cancelled (vendor)"
+      );
+    }
+  } catch (error) {
+    console.error("Error sending booking-cancelled emails:", error);
+  }
+}

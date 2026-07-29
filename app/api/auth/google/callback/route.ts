@@ -16,7 +16,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { User } from "@/lib/models/User";
 import { Vendor } from "@/lib/models/Vendor";
-import { sendLoginNotificationEmail } from "@/lib/mail";
+import { sendLoginNotificationEmail, dispatch } from "@/lib/mail";
 import { describeDevice } from "@/lib/device";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -125,7 +125,7 @@ export async function GET(req: NextRequest) {
       vendor.lastLoginMethod = "google";
       await vendor.save();
 
-      await sendLoginNotificationEmail(vendor.email, vendor.name, "vendor", userAgent);
+      dispatch(sendLoginNotificationEmail(vendor.email, vendor.name, "vendor", userAgent), "login-notification (google)");
 
       return NextResponse.redirect(new URL("/vendor/dashboard", req.url));
     }
@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
     user.lastLoginMethod = "google";
     await user.save();
 
-    await sendLoginNotificationEmail(user.email, user.name, "user", userAgent);
+    dispatch(sendLoginNotificationEmail(user.email, user.name, "user", userAgent), "login-notification (google)");
 
     return NextResponse.redirect(new URL("/dashboard", req.url));
   } catch (error: unknown) {

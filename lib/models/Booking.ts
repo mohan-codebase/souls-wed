@@ -46,6 +46,10 @@ const BookingSchema = new Schema({
   // providerId matches the `id` field in venues-data.ts or Vendor `_id`
   providerId:   { type: String, required: true },
   providerName: { type: String, required: true },
+  // Thumbnail copied from the listing at booking time. BookingCard used to look
+  // the image up in the static lib/venues-data.ts, which no longer contains the
+  // real listings — so every booking card rendered as an empty block.
+  providerImage: { type: String, default: "" },
 
   // The category of the booking (e.g. "venue", "room", "planner", "photographer")
   bookingType: {
@@ -127,6 +131,16 @@ const BookingSchema = new Schema({
   // Audit trail for offline payments: which admin recorded it, and why.
   paidRecordedBy: { type: String, default: "" },
   paidNote: { type: String, default: "" },
+
+  // ─── CANCELLATION TRAIL ───────────────────────────────────
+  // Who ended the booking and why. Kept on the record rather than deleting it,
+  // so a declined booking is still auditable and the date is provably released.
+  cancelledBy: {
+    type: String,
+    enum: ["user", "vendor", "admin"],
+  },
+  cancellationReason: { type: String, default: "" },
+  cancelledAt: { type: Date },
 
   payoutStatus: {
     type: String,

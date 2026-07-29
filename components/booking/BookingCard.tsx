@@ -30,13 +30,50 @@ interface BookingCardProps {
 
 export default function BookingCard({ booking, isVendor = false }: BookingCardProps) {
   const router = useRouter();
+  // `providerImage` is copied onto the booking at creation time. The old
+  // getVenueById() lookup reads the static lib/venues-data.ts, which no longer
+  // holds the real listings, so it always missed and every card rendered as an
+  // empty block. Kept only as a fallback for bookings made before the change.
   const venueDetails = getVenueById(booking.providerId);
-  const venueImage = venueDetails?.image;
+  const venueImage = booking.providerImage || venueDetails?.image;
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isDeleted, setIsDeleted] = useState(false);
+  const [vendorBusy, setVendorBusy] = useState(false);
+
+  // "Mark complete" is only offered once the event is actually over — completing
+  // a booking is what unlocks the customer's ability to review it.
+  const lastDate =
+    booking.eventDate ||
+    (booking.eventDates && booking.eventDates[booking.eventDates.length - 1]) ||
+    booking.checkOut;
+  const eventHasPassed = lastDate ? new Date(lastDate) <= new Date() : false;
+
+  /** Vendor-side decline / complete. See PATCH /api/bookings/[id]. */
+  const runVendorAction = async (action: "decline" | "complete", reason?: string) => {
+    setVendorBusy(true);
+    setPaymentError(null);
+    try {
+      const res = await fetch(`/api/bookings/${booking._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPaymentError(data.message || "Could not update the booking.");
+        return;
+      }
+      router.refresh();
+      if (action === "decline") setIsDeleted(true);
+    } catch {
+      setPaymentError("Network error. Please try again.");
+    } finally {
+      setVendorBusy(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -194,14 +231,43 @@ export default function BookingCard({ booking, isVendor = false }: BookingCardPr
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-[11px] font-medium text-slate-500 dark:text-stone-400 uppercase">Paid</span>
-            <span className={`text-sm font-bold leading-none ${booking.status === 'confirmed' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-stone-500'}`}>
-              {booking.status === 'confirmed'
-                ? formatAsCurrency(booking.advanceAmount, booking.currency || "INR")
-                : formatAsCurrency(0, booking.currency || "INR")
-              }
+            <span className={`text-sm font-bold leading-none ${booking.paymentStatus === 'paid' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-stone-500'}`}>
+              {/* Was inferred from `status === "confirmed"`, which showed a paid
+                  amount for bookings nobody had paid for. Reads the real record now. */}
+              {formatAsCurrency(booking.amountPaid || 0, booking.currency || "INR")}
             </span>
           </div>
         </div>
+
+        {/* Action Buttons for Vendor — previously the vendor card was entirely
+            read-only, so a double-booked partner had no way to decline. */}
+        {isVendor && (booking.status === "pending" || booking.status === "confirmed") && (
+          <div className="flex flex-col gap-2">
+            {booking.status === "confirmed" && eventHasPassed && (
+              <button
+                onClick={() => runVendorAction("complete")}
+                disabled={vendorBusy}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-5 py-2.5 rounded-full text-xs transition-colors shadow-sm disabled:opacity-50"
+              >
+                {vendorBusy ? "Saving..." : "Mark Complete"}
+              </button>
+            )}
+            <button
+              onClick={() => {
+                const reason = window.prompt(
+                  "Decline this booking?\n\nThe customer will be emailed and the dates released.\n\nReason (optional):",
+                  ""
+                );
+                if (reason === null) return;
+                runVendorAction("decline", reason);
+              }}
+              disabled={vendorBusy}
+              className="bg-white dark:bg-[var(--sw-surface)] hover:bg-red-50 dark:hover:bg-red-500/10 text-slate-700 dark:text-stone-300 hover:text-red-600 font-bold px-5 py-2 rounded-full text-[11px] transition-colors border border-slate-200 dark:border-white/10 disabled:opacity-50"
+            >
+              {vendorBusy ? "Working..." : "Decline"}
+            </button>
+          </div>
+        )}
 
         {/* Action Buttons for User */}
         {!isVendor && (booking.status === "pending" || booking.status === "confirmed") && (

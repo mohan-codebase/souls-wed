@@ -27,6 +27,8 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
 import { quoteBooking, PricingError } from "@/lib/pricing";
+import { getVendorProviderIds, getVendorEmailForProvider } from "@/lib/booking-access";
+import { sendBookingCreatedEmails, dispatch } from "@/lib/mail";
 
 /**
  * How far the client's displayed price may drift from the server's before we
@@ -232,6 +234,7 @@ export async function POST(req: Request) {
       // Use the name from the DB, not the client's — otherwise a booking can be
       // filed against one listing while displaying another listing's name.
       providerName: quote.providerName || providerName,
+      providerImage: quote.providerImage || "",
       bookingType,
       eventDates: bookingType !== "room" ? eventDates.map((d: string) => new Date(d)) : undefined,
       eventDate: bookingType !== "room" && eventDates.length > 0 ? new Date(eventDates[0]) : undefined,
@@ -254,6 +257,15 @@ export async function POST(req: Request) {
     });
 
     await newBooking.save();
+
+    // Notify customer, vendor and admin. Fire-and-forget: a slow SMTP server
+    // must never delay (or fail) the booking itself.
+    dispatch(
+      getVendorEmailForProvider(providerId).then((vendorEmail) =>
+        sendBookingCreatedEmails(newBooking.toObject(), vendorEmail ?? undefined)
+      ),
+      "booking-created"
+    );
 
     return NextResponse.json(
       {
@@ -303,8 +315,16 @@ export async function GET() {
     // Admins see everything.
     let query: Record<string, unknown> = { userId: session.userId };
     if (session.role === "vendor") {
-      const ownedVenues = await Venue.find({ vendorId: session.userId }).select("venueId").lean();
-      const providerIds = [session.userId, ...ownedVenues.map((v) => v.venueId)];
+      // A vendor's bookings can arrive under three different id conventions:
+      //   - their own account _id      (vendor booked directly)
+      //   - Venue.venueId              (venue/banquet listings)
+      //   - ServiceListing.serviceId   (planners, caterers, decorators,
+      //                                 photographers, rooms)
+      //
+      // ServiceListing used to be missing here, so every non-venue booking was
+      // invisible to the vendor who owned it — 21 of 26 listings on the current
+      // catalogue could never deliver a lead. See AUDIT-REPORT.md #3.
+      const providerIds = await getVendorProviderIds(session.userId!);
       query = { providerId: { $in: providerIds } };
     } else if (session.role === "admin") {
       query = {};

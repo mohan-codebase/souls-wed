@@ -573,6 +573,13 @@ export default function VendorDashboard() {
     }
   };
 
+  // "Active" excludes cancelled and completed bookings — a declined lead was
+  // still being counted, so the header read "2 active leads" with one of them
+  // cancelled.
+  const activeBookings = bookings.filter(
+    (b: any) => b.status !== "cancelled" && b.status !== "completed"
+  );
+
   const fetchBookings = async () => {
     setLoadingData(true);
     try {
@@ -807,7 +814,7 @@ export default function VendorDashboard() {
       icon: Briefcase,
       count: venues.length + services.length || null
     },
-    { id: "leads", label: "Booking Inquiries", count: bookings.length || null, icon: Inbox },
+    { id: "leads", label: "Booking Inquiries", count: activeBookings.length || null, icon: Inbox },
     { id: "settings", label: "Business Profile", icon: SettingsIcon },
     { id: "account-settings", label: "Settings", icon: SlidersHorizontalIcon },
     { id: "home", label: "Back to Home", icon: HomeIcon, href: "/" },
@@ -1194,7 +1201,7 @@ export default function VendorDashboard() {
                         },
                         {
                           label: "Active Leads",
-                          count: bookings.length,
+                          count: activeBookings.length,
                           icon: TrendingUpIcon,
                           color: "text-emerald-500 dark:text-emerald-400",
                           bg: "bg-emerald-50 dark:bg-emerald-500/10",
@@ -1264,6 +1271,7 @@ export default function VendorDashboard() {
                     const plannerListings = services.filter(s => s.category === "planners");
                     const catererListings = services.filter(s => s.category === "caterers");
                     const decoratorListings = services.filter(s => s.category === "decorators");
+                    const photographyListings = services.filter(s => s.category === "photography");
 
                     const minPrice = (arr: any[], key = "priceFrom") =>
                       arr.length === 0 ? null : Math.min(...arr.map(i => Number(i[key] || i.price || 0)).filter(v => v > 0));
@@ -1272,10 +1280,11 @@ export default function VendorDashboard() {
 
                     const categories = [
                       { id: "venues", label: "Venues", icon: Building2, color: "from-amber-500 to-orange-500", lightBg: "bg-amber-50 border-amber-100", count: venueListings.length, price: minPrice(venueListings, "price"), unit: "per day", live: venueListings.filter(v => v.active).length, topName: getTopName(venueListings) },
-                      { id: "rooms", label: "Rooms", icon: BedDouble, color: "from-blue-500 to-indigo-500", lightBg: "bg-blue-50 border-blue-100", count: roomListings.length, price: minPrice(roomListings), unit: "per night", live: roomListings.filter(s => s.active).length, topName: getTopName(roomListings) },
                       { id: "planners", label: "Planners", icon: ClipboardList, color: "from-violet-500 to-purple-500", lightBg: "bg-violet-50 border-violet-100", count: plannerListings.length, price: minPrice(plannerListings), unit: "per event", live: plannerListings.filter(s => s.active).length, topName: getTopName(plannerListings) },
                       { id: "caterers", label: "Caterers", icon: Utensils, color: "from-emerald-500 to-teal-500", lightBg: "bg-emerald-50 border-emerald-100", count: catererListings.length, price: minPrice(catererListings), unit: "per plate", live: catererListings.filter(s => s.active).length, topName: getTopName(catererListings) },
                       { id: "decorators", label: "Decorators", icon: Palette, color: "from-pink-500 to-rose-500", lightBg: "bg-pink-50 border-pink-100", count: decoratorListings.length, price: minPrice(decoratorListings), unit: "per event", live: decoratorListings.filter(s => s.active).length, topName: getTopName(decoratorListings) },
+                      { id: "photography", label: "Photography", icon: Camera, color: "from-purple-500 to-indigo-500", lightBg: "bg-purple-50 border-purple-100", count: photographyListings.length, price: minPrice(photographyListings), unit: "per day", live: photographyListings.filter(s => s.active).length, topName: getTopName(photographyListings) },
+                      { id: "rooms", label: "Rooms", icon: BedDouble, color: "from-blue-500 to-indigo-500", lightBg: "bg-blue-50 border-blue-100", count: roomListings.length, price: minPrice(roomListings), unit: "per night", live: roomListings.filter(s => s.active).length, topName: getTopName(roomListings) },
                     ];
 
                     return (
@@ -1284,7 +1293,7 @@ export default function VendorDashboard() {
                           <h3 className={`font-extrabold text-sm ${headingText}`}>Your Listings at a Glance</h3>
                           <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Real-time • {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                           {categories.map((cat) => (
                             <button
                               key={cat.id}
@@ -1398,7 +1407,7 @@ export default function VendorDashboard() {
                   <h3 className={`font-extrabold text-base ${headingText}`}>Booking Inquiries</h3>
                   <span className={`text-[10px] font-black border px-2.5 py-1 rounded-full uppercase tracking-wider ${isDarkMode ? "bg-emerald-950/20 text-emerald-400 border-emerald-900" : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/25"
                     }`}>
-                    {bookings.length} active leads
+                    {activeBookings.length} active leads
                   </span>
                 </div>
 
@@ -2177,7 +2186,7 @@ export default function VendorDashboard() {
                               className={`border rounded-xl px-4 py-2.5 outline-none font-semibold ${isDarkMode ? "bg-stone-950 border-stone-800 text-stone-200" : "bg-white border-stone-200 text-stone-800"
                                 }`}
                             >
-                              {["Venues", "Rooms", "Planners", "Caterers", "Decorators"].map((category) => (
+                              {["Venues", "Planners", "Caterers", "Decorators", "Photography", "Rooms"].map((category) => (
                                 <option key={category} value={category}>{category}</option>
                               ))}
                             </select>

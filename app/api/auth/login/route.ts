@@ -22,8 +22,9 @@ import { connectDB } from "@/lib/mongodb";
 import { Vendor } from "@/lib/models/Vendor";
 import { Admin } from "@/lib/models/Admin";
 import { User } from "@/lib/models/User";
+import { Otp } from "@/lib/models/Otp";
 import { verifyPassword } from "@/lib/auth";
-import { sendLoginNotificationEmail } from "@/lib/mail";
+import { sendLoginNotificationEmail, sendVerificationOtpEmail, dispatch } from "@/lib/mail";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
@@ -88,6 +89,35 @@ export async function POST(req: Request) {
       );
     }
 
+    // ─── Step 3.8: Check Two-Factor Authentication ───
+    if (user.twoFactorEnabled) {
+      // Generate 6-digit OTP
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Clear any existing OTPs for this login attempt
+      await Otp.deleteMany({ email: user.email.toLowerCase().trim(), role });
+      
+      // Save new OTP
+      await Otp.create({
+        email: user.email.toLowerCase().trim(),
+        role: role,
+        otp: otpCode,
+      });
+
+      // Send OTP via email
+      await sendVerificationOtpEmail(user.email, user.name, otpCode);
+      
+      // Log for local dev
+      console.log(`[2FA DEBUG] Login OTP for ${user.email}: ${otpCode}`);
+
+      return NextResponse.json({
+        success: true,
+        requires2FA: true,
+        message: "Two-Factor Authentication required.",
+        user: { email: user.email, role: role }
+      });
+    }
+
     // ─── Step 4: Create encrypted session cookie ───
     // This is the key change from the old approach.
     // getIronSession() reads/creates the encrypted cookie.
@@ -118,8 +148,14 @@ export async function POST(req: Request) {
       await user.save();
     }
 
-    // Send asynchronous login notification email
-    await sendLoginNotificationEmail(user.email, user.name, role, userAgent);
+    // Fire-and-forget. This used to be awaited despite the comment calling it
+    // asynchronous, which held the login response open for the whole SMTP
+    // round-trip — measured at 10-15s per sign-in, and a hard failure whenever
+    // the mail server was down. See AUDIT-REPORT.md #7.
+    dispatch(
+      sendLoginNotificationEmail(user.email, user.name, role, userAgent),
+      "login-notification"
+    );
 
     return NextResponse.json({
       success: true,

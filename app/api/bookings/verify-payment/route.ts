@@ -6,6 +6,8 @@ import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
 import { getStripe } from "@/lib/stripe";
 import { convertINRTo } from "@/lib/currency";
+import { getVendorEmailForProvider } from "@/lib/booking-access";
+import { sendBookingConfirmedEmails, dispatch } from "@/lib/mail";
 
 export async function POST(req: Request) {
   try {
@@ -127,6 +129,13 @@ export async function POST(req: Request) {
     booking.paidAt = new Date();
     booking.paidMethod = "stripe";
     await booking.save();
+
+    dispatch(
+      getVendorEmailForProvider(booking.providerId).then((vendorEmail) =>
+        sendBookingConfirmedEmails(booking.toObject(), vendorEmail ?? undefined)
+      ),
+      "booking-confirmed"
+    );
 
     return NextResponse.json({
       success: true,

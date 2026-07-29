@@ -1,6 +1,8 @@
 import { connectDB } from "@/lib/mongodb";
 import { Booking } from "@/lib/models/Booking";
 import { getStripe } from "@/lib/stripe";
+import { getVendorEmailForProvider } from "@/lib/booking-access";
+import { sendBookingConfirmedEmails, dispatch } from "@/lib/mail";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -48,6 +50,18 @@ export async function POST(req: Request) {
           await booking.save();
           console.log(
             `Booking ${bookingId} confirmed via Stripe webhook (${booking.amountPaid} ${booking.currency})`
+          );
+
+          // The webhook fires even if the customer closed the tab before the
+          // redirect, so this is often the only chance to send confirmations.
+          // `sendBookingConfirmedEmails` is idempotent from Stripe's point of
+          // view because we only get here when paymentStatus wasn't already
+          // "paid" — so the redirect path won't double-send.
+          dispatch(
+            getVendorEmailForProvider(booking.providerId).then((vendorEmail) =>
+              sendBookingConfirmedEmails(booking.toObject(), vendorEmail ?? undefined)
+            ),
+            "booking-confirmed (webhook)"
           );
         }
       }

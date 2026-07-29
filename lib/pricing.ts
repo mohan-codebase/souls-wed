@@ -70,6 +70,7 @@ export interface Quote {
   /** The booking type the provider actually supports — the client must match this. */
   expectedBookingType: BookingKind;
   providerName: string;
+  providerImage: string;
   providerKind: "venue" | "service" | "vendor";
   /** Guest bounds, so the caller can validate headcount against the listing. */
   minGuests: number;
@@ -91,6 +92,8 @@ export class PricingError extends Error {
  */
 interface ResolvedProvider {
   name: string;
+  /** Thumbnail, denormalised onto the booking so cards don't need a second lookup. */
+  image: string;
   kind: "venue" | "service" | "vendor";
   expectedBookingType: BookingKind;
   advancePercentage: number;
@@ -110,6 +113,7 @@ interface ResolvedProvider {
  */
 function resolveServicePricing(
   name: string,
+  image: string,
   category: string | undefined,
   priceFromRaw: unknown,
   advancePercentageRaw: unknown,
@@ -129,6 +133,7 @@ function resolveServicePricing(
 
   const base: ResolvedProvider = {
     name,
+    image,
     kind,
     expectedBookingType: "vendor",
     advancePercentage,
@@ -182,6 +187,7 @@ async function resolveProvider(providerId: string): Promise<ResolvedProvider | n
     const rentalCost = parsePrice(venue.rentalCost || venue.price);
     return {
       name: venue.name,
+      image: venue.heroImage || venue.image || "",
       kind: "venue",
       // A venue can be booked as a venue or (if it has rooms) as accommodation.
       // The caller's bookingType decides; both are legitimate here.
@@ -202,6 +208,7 @@ async function resolveProvider(providerId: string): Promise<ResolvedProvider | n
   if (service) {
     return resolveServicePricing(
       service.name,
+      service.image || "",
       service.category,
       service.priceFrom,
       (service as { advancePercentage?: number }).advancePercentage,
@@ -214,6 +221,7 @@ async function resolveProvider(providerId: string): Promise<ResolvedProvider | n
     if (vendor) {
       return resolveServicePricing(
         vendor.businessName || vendor.name,
+        vendor.profileImage || (Array.isArray(vendor.images) ? vendor.images[0] : "") || "",
         vendor.category,
         vendor.priceFrom,
         (vendor as { advancePercentage?: number }).advancePercentage,
@@ -321,6 +329,7 @@ export async function quoteBooking(providerId: string, req: QuoteRequest): Promi
     advancePercentage: provider.advancePercentage,
     expectedBookingType: provider.expectedBookingType,
     providerName: provider.name,
+    providerImage: provider.image,
     providerKind: provider.kind,
     minGuests: provider.minGuests,
     maxGuests: provider.maxGuests,

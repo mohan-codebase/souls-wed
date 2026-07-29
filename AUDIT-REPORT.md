@@ -108,7 +108,52 @@ node scripts/migrate-booking-payment-fields.mjs --mode=trust
 Run it from the project root (it reads `MONGODB_URI` from `.env`) — my sandbox can't reach your
 Atlas cluster.
 
-**Still open:** #3, #4, #5 (the marketplace loop), #6–#10 (auth hardening), and the rest below.
+---
+
+## Fix log 2 — the marketplace loop
+
+**Fixed: #3, #4, #5, #7, #16** — plus two counting bugs found while testing.
+
+| Change | Files |
+|---|---|
+| Vendor booking queries now resolve `ServiceListing.serviceId` as well as `Venue.venueId`. Centralised in one helper so the rule can't drift again. | `lib/booking-access.ts` (new), `app/api/bookings/route.ts` |
+| `GET /api/bookings/[id]` authorizes the owning vendor instead of 403-ing them off their own booking. | `app/api/bookings/[id]/route.ts` |
+| New `PATCH /api/bookings/[id]` — vendor `decline` / `complete`, customer `cancel`. Records who cancelled and why; releases the dates. Deliberately cannot set `confirmed`: that follows payment, not opinion. | `app/api/bookings/[id]/route.ts` |
+| Decline / Mark Complete buttons on the vendor's booking card. "Mark Complete" only appears once the event date has passed, since completing is what unlocks reviews. | `components/booking/BookingCard.tsx` |
+| Six booking email templates (created / confirmed / cancelled × customer, vendor, admin), wired into booking creation, Stripe verification, the webhook, admin status changes, offline payments, and vendor decline. | `lib/mail.ts`, 5 route files |
+| Login no longer awaits SMTP. **Measured 10–15s → 179ms.** Same fix applied to `verify-2fa` and both Google OAuth callbacks. | `app/api/auth/login/route.ts`, `verify-2fa`, `google/*` |
+| Booking cards render a real image — `providerImage` is denormalised onto the booking at creation instead of being looked up in the dead `lib/venues-data.ts`. | `lib/pricing.ts`, `lib/models/Booking.ts`, `components/booking/BookingCard.tsx` |
+| Card's "Paid" figure reads `amountPaid` instead of inferring payment from `status === "confirmed"`. | `components/booking/BookingCard.tsx` |
+| "Active Leads" excludes cancelled and completed bookings — a declined lead was still being counted. | `app/(dashboard)/vendor/dashboard/page.tsx` |
+
+### Verified after the fix
+
+| Check | Before | After |
+|---|---|---|
+| Vendor sees a booking for their decorator listing | Invisible | **Visible** |
+| `GET /api/bookings/[id]` as the owning vendor | 403 | **200** |
+| Vendor declines a booking | No such action | **200**, `cancelledBy: "vendor"`, reason stored |
+| Dates released after decline | — | **`blockedDates: []`** |
+| Vendor marks an unconfirmed booking complete | — | **409** |
+| Vendor uses the customer's `cancel` action | — | **403** |
+| Vendor tries `action: "confirm"` | — | **400** — payment is the only path |
+| Declining twice | — | **409** |
+| Login round-trip | 10–15s | **179ms** |
+
+`npx tsc --noEmit` passes. Test bookings removed; DB verified back to 6 bookings.
+
+### Known gaps in this batch
+
+- **2FA login is still slow.** `sendVerificationOtpEmail` is deliberately still
+  awaited in `login/route.ts` — if that email fails, the user is stranded at a code
+  prompt with no code, so failing loudly beats responding fast. Fixing it properly
+  means a mail queue.
+- **No refund automation.** Cancelling a paid booking returns `refundDue` and tells
+  the customer a refund is coming, but nothing calls Stripe. Refunds are manual.
+- **The user dashboard has no cancel-with-reason UI.** The customer's `cancel`
+  action exists on the API; the dashboard still uses the older hard-`DELETE` path.
+
+**Still open:** #6, #8, #9, #10 (auth and calendar hardening), #11–#15, and the P3 list below.
 
 ---
 

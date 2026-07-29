@@ -4,6 +4,12 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
+import { getVendorEmailForProvider } from "@/lib/booking-access";
+import {
+  sendBookingConfirmedEmails,
+  sendBookingCancelledEmails,
+  dispatch,
+} from "@/lib/mail";
 
 async function checkAdminSession() {
   const session = await getIronSession<SessionData>(
@@ -72,6 +78,13 @@ export async function PATCH(req: Request) {
       if (booking.status === "pending") booking.status = "confirmed";
       await booking.save();
 
+      dispatch(
+        getVendorEmailForProvider(booking.providerId).then((vendorEmail) =>
+          sendBookingConfirmedEmails(booking.toObject(), vendorEmail ?? undefined)
+        ),
+        "booking-confirmed (offline payment)"
+      );
+
       return NextResponse.json({
         success: true,
         message: `Offline payment of ${amount} recorded. Booking confirmed.`,
@@ -106,8 +119,22 @@ export async function PATCH(req: Request) {
       );
     }
 
+    const previousStatus = booking.status;
     booking.status = status;
+    if (status === "cancelled" && previousStatus !== "cancelled") {
+      booking.cancelledBy = "admin";
+      booking.cancelledAt = new Date();
+    }
     await booking.save();
+
+    if (status === "cancelled" && previousStatus !== "cancelled") {
+      dispatch(
+        getVendorEmailForProvider(booking.providerId).then((vendorEmail) =>
+          sendBookingCancelledEmails(booking.toObject(), vendorEmail ?? undefined)
+        ),
+        "booking-cancelled (admin)"
+      );
+    }
 
     return NextResponse.json({
       success: true,
