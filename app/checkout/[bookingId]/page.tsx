@@ -3,16 +3,27 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import Image from "@/components/shared/CustomImage";
 import { IndianRupeeIcon } from "@/components/ui/indian-rupee";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { ArrowLeftIcon } from "@/components/ui/arrow-left";
 import { ShieldCheckIcon } from "@/components/ui/shield-check";
 import { formatAsCurrency } from "@/lib/currency";
 
+interface CheckoutProvider {
+  name: string;
+  city?: string;
+  country?: string;
+  description?: string;
+  features: string[];
+  images: string[];
+}
+
 export default function CheckoutPage() {
   const { bookingId } = useParams();
   const router = useRouter();
   const [booking, setBooking] = useState<any>(null);
+  const [provider, setProvider] = useState<CheckoutProvider | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -26,6 +37,9 @@ export default function CheckoutPage() {
         }
         const data = await res.json();
         setBooking(data.booking);
+        // `provider` comes from whichever Venue/ServiceListing this booking
+        // points at — absent only if that listing was deleted after booking.
+        setProvider(data.provider ?? null);
       } catch (err: any) {
         setError(err.message || "Something went wrong.");
       } finally {
@@ -125,6 +139,62 @@ export default function CheckoutPage() {
 
         {/* Left column: Details */}
         <div className="lg:col-span-3 flex flex-col gap-6">
+          {provider && (
+            <div className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-sm flex flex-col sm:flex-row">
+              {provider.images[0] && (
+                <div className="relative w-full sm:w-64 h-48 sm:h-auto shrink-0 bg-stone-100">
+                  <Image
+                    src={provider.images[0]}
+                    alt={provider.name}
+                    fill
+                    sizes="(max-width: 640px) 100vw, 256px"
+                    className="object-cover"
+                  />
+                </div>
+              )}
+              <div className="p-6 flex flex-col gap-3 min-w-0">
+                <div>
+                  <h2 className="text-lg font-bold text-stone-900">{provider.name}</h2>
+                  {(provider.city || provider.country) && (
+                    <p className="text-xs font-medium text-stone-500 mt-0.5">
+                      {[provider.city, provider.country].filter(Boolean).join(", ")}
+                    </p>
+                  )}
+                </div>
+                {provider.description && (
+                  <p className="text-sm text-stone-600 leading-relaxed line-clamp-3">{provider.description}</p>
+                )}
+                {provider.features.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {provider.features.map((feature) => (
+                      <span
+                        key={feature}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-stone-100 text-stone-600"
+                      >
+                        {feature}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {provider.images.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pt-1">
+                    {provider.images.slice(1, 5).map((src, i) => (
+                      <div key={src} className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-stone-100">
+                        <Image
+                          src={src}
+                          alt={`${provider.name} photo ${i + 2}`}
+                          fill
+                          sizes="64px"
+                          className="object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white border border-stone-200 rounded-3xl p-6 md:p-8 shadow-sm">
             <h2 className="text-lg font-bold text-stone-800 mb-6 border-b border-stone-100 pb-4">Booking Details</h2>
             

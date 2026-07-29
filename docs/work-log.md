@@ -1400,9 +1400,118 @@ precisely (`Admiralty, Hong Kong`) even without its name in the query.
 Verified throughout: `tsc --noEmit` clean, no console errors, each fix checked in-browser
 individually.
 
+### Follow-up (same day) — the checkout page didn't show what you were actually paying for
+
+User feedback on the checkout page: it listed dates, guests, and a price, but nothing about
+*what* was being booked — no photo, no description, no amenities. Someone landing on
+`/checkout/[bookingId]` mid-payment had no visual confirmation they were looking at the right
+venue.
+
+`Booking` documents only store `providerId`/`providerName` — the photos/description/features
+live on the `Venue` or `ServiceListing` document that `providerId` points to (same convention
+already used by `create-order` and the search pipeline: a `Venue.venueId` match for
+venue/room bookings, a `ServiceListing.serviceId` match for everything else). Added a
+`findProvider()` lookup to `GET /api/bookings/[id]` that resolves whichever one applies and
+returns its name, city/country, description, features, and a de-duplicated image list
+(hero + gallery). The checkout page renders this as a listing-preview card — hero photo,
+name, location, description, feature chips, and a 4-photo strip — above the existing booking
+details, using `CustomImage` so it degrades gracefully for any photo host, not just the
+whitelisted ones.
+
+Verified against a live booking end to end, not just against the API response: signed up a
+fresh test account, booked JW Marriott Hotel Hong Kong for the one date the calendar still had
+open (the 30th/31st were already taken by a real booking — confirmed the calendar correctly
+excluded them), and loaded that booking's real checkout page. The provider card rendered
+correctly — hero photo, "Hong Kong, Global", the real description, and the gallery strip — with
+no console errors. Deleted the test account and booking afterward to leave the shared dev
+database as found.
+
+### Follow-up (same day) — "it still looks like a template, not a real app"
+
+Feedback relayed from the client's side, not tied to a specific page. Reviewed the homepage
+looking for what actually reads as placeholder rather than a layout problem. Found three
+concrete things:
+
+1. **Fabricated testimonials.** `TestimonialsSection.tsx` had 9 invented couples ("Priya &
+   Arjun" etc.) with made-up quotes and single-letter-initial avatars standing in for photos —
+   the single most template-flavored element on the page. Removed the section from
+   `app/(public)/page.tsx` rather than inventing better-sounding fake copy; the component is
+   left in place, unused, for whenever there's real reviews to put in it.
+2. **"0 Rooms" on every venue card.** `VenueCard.tsx` rendered `{venue.rooms} Rooms`
+   unconditionally in both list and grid view, so every single venue — including luxury hotels
+   — showed "0 Rooms" as if it were a real stat. (The venue detail page's own `VenueAbout`/
+   `VenueGoodToKnow` already guarded this correctly with `Number(venue.rooms) > 0` — only the
+   card component was missing the check.) Now hidden when zero.
+3. **A literal test listing was live on the homepage.** "Grand Automated Palace" showed
+   `UNAVAILABLE` (actually `CustomImage`'s broken-image fallback, not an availability badge —
+   its `image` field was empty) and "₹0 Per Day" right next to real venues in Top Picks.
+   Checked the underlying document: `description: "A beautiful venue for tests."`, no image,
+   `price: "0"` — someone's test data from the vendor "add venue" flow that got `verified:
+   true` and surfaced everywhere verified listings do. Set `verified: false` and `active:
+   false` on that one document so it drops off every public surface, not just the homepage
+   carousel — a narrower component-level filter would have left it live in the `/venues`
+   directory.
+
+Verified: reloaded the homepage, confirmed all three are gone (listing count dropped 27→26,
+matching the one removed venue), `tsc --noEmit` clean, no console errors.
+
+### Follow-up (same day) — "redesign this page" (`/categories`), and the bug went deeper than one page
+
+Asked to redesign `/categories`. Before touching visuals, checked why it felt off: the page
+hardcoded `VENDOR_CATEGORIES.slice(0, 12)` as "Available Categories" and rendered the other 27
+as grayscale, `pointer-events-none`, aria-disabled tiles labeled "Arriving Soon" — directly
+contradicting the rest of the site, which advertises "39 vendor categories" and routes every
+single one of them through `/[category]` correctly. This one page was the single place telling
+visitors that 69% of the marketplace doesn't exist yet.
+
+It wasn't isolated to this page. `WeddingCategoriesSection.tsx` — rendered on the homepage
+*and* on every one of the 39 category listing pages via `PublicVendorDirectory` (shown
+whenever there's no active search) — had the identical bug: `isAvailable = i < 12` stayed
+true even after clicking "View 27 More Categories" to expand the full list, so "expanding"
+just revealed 27 more disabled, grayscale, "Arriving soon" circles. Given how often that
+component renders, this was likely the single biggest contributor to "feels like a template."
+Fixed both: removed the fake-availability gate entirely so every category is a real link.
+
+Rebuilt `/categories` itself around `RESOLVED_CATEGORY_GROUPS` (the same taxonomy the hero
+search's category picker already uses — Venue & Stay, Planning, Food & Cake, etc. — so the two
+can't drift apart), all 39 categories shown as live cards, plus a search box that filters
+across the real full set instead of only the fake "upcoming" list.
+
+While verifying the new grouped grid, found two more real bugs in the same area: two of the
+39 category images 404'd (`images.unsplash.com` returning 404, rendering as `CustomImage`'s
+broken-image fallback on the card). One was a one-digit typo in the Unsplash photo ID
+(`...c13136` vs the real `...c12636`) — same photo, just mistyped. The other (Priests) pointed
+at a since-removed photo entirely; replaced with a verified, on-theme replacement. Scripted a
+check across all 39 image URLs afterward — zero broken.
+
+Also found (not created by me) a very recent, in-progress duplicate at
+`app/%28public%29/categories/page.tsx` plus a `CategoryQuickViewModal.tsx` — modified within
+the same session, ~7 seconds apart, but authored by neither me nor, on inspection, tracked to
+any deliberate work either side recognized. Confirmed with the user before touching it (it
+wasn't reachable at any real URL — `%28public%29` is a literal folder name, not a Next.js
+route group — so it wasn't live either way) and removed both once confirmed safe.
+
+Verified: `tsc --noEmit` clean (had to clear a stale `.next/types` cache entry pointing at the
+deleted file), no console errors, DOM-checked the homepage's expanded category list (43 real
+links, zero "Arriving soon" instances), and confirmed the new `/categories` search filters
+correctly across all 39.
+
+**Follow-up within the hour**: feedback that the visual layout was better before the redesign.
+Clarified the ask wasn't a full revert (that would bring back the fake "Arriving Soon" tiles) —
+just the old two-section look: a top-12 image-card grid ("Available Categories") plus a
+compact list below for the rest. Rebuilt `/categories` on that original structure instead of
+the grouped layout, keeping every one of the 39 as a real link (list items are now `<Link>`s
+with hover states, not disabled divs) and correcting the copy that used to say "coming soon."
+`WeddingCategoriesSection.tsx` (the homepage circle row) needed no change here — its visual
+style was never touched, only the fake-disabled branch was removed earlier, so the "old style"
+was already what's live. Verified: `tsc --noEmit` clean, no console errors, no "Arriving Soon"
+text or `aria-disabled` elements anywhere on the page.
+
 ### Outstanding
 
-- The 34-category content gap.
+- The 34-category **content** gap (no listings yet) is real and separate from the
+  **availability** bug fixed above — every category now correctly routes and is browsable,
+  but 34 of them still have zero actual vendor listings behind them.
 - Everything already listed as outstanding from the July 28 session (guest/budget filters
   unverifiable against real inventory, mobile hero bar not collapsed, orphaned
   `/vendors/[category]` route).

@@ -23,7 +23,11 @@ export async function GET() {
     }
 
     await connectDB();
-    const users = await User.find({ role: { $ne: "admin" } }).sort({ createdAt: -1 });
+    const users = await User.find({
+      role: { $nin: ["admin", "superadmin"] },
+      email: { $ne: "admin@soulswed.com" },
+      name: { $ne: "Admin User" },
+    }).sort({ createdAt: -1 });
     return NextResponse.json({ success: true, users });
   } catch (error: unknown) {
     console.error("Error in GET /api/admin/users:", error);

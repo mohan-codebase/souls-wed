@@ -53,7 +53,7 @@ interface AdminSession {
   profileImage?: string;
 }
 
-type TabType = "overview" | "approvals" | "vendors" | "bookings" | "users" | "services" | "sessions" | "settings";
+type TabType = "overview" | "approvals" | "vendors" | "bookings" | "users" | "services" | "inquiries" | "payouts" | "reviews" | "settings";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -77,8 +77,10 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [venuesList, setVenuesList] = useState<any[]>([]);
   const [servicesList, setServicesList] = useState<any[]>([]);
-  const [sessionUsers, setSessionUsers] = useState<any[]>([]);
-  const [sessionVendors, setSessionVendors] = useState<any[]>([]);
+  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [payoutsData, setPayoutsData] = useState<any>(null);
+  const [reviewsList, setReviewsList] = useState<any[]>([]);
+  const [inquiryStatusFilter, setInquiryStatusFilter] = useState<string>("all");
 
   // CopyIcon state for feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -135,14 +137,16 @@ export default function AdminDashboard() {
     setLoadingData(true);
     setError(null);
     try {
-      const [statsRes, vendorsRes, bookingsRes, usersRes, venuesRes, servicesRes, sessionsRes] = await Promise.all([
+      const [statsRes, vendorsRes, bookingsRes, usersRes, venuesRes, servicesRes, inquiriesRes, payoutsRes, reviewsRes] = await Promise.all([
         fetch("/api/admin/stats"),
         fetch("/api/admin/vendors"),
         fetch("/api/admin/bookings"),
         fetch("/api/admin/users"),
         fetch("/api/venues?limit=100"),
         fetch("/api/services?limit=500"),
-        fetch("/api/admin/sessions"),
+        fetch("/api/admin/inquiries"),
+        fetch("/api/admin/payouts"),
+        fetch("/api/admin/reviews"),
       ]);
 
       if (statsRes.ok) {
@@ -177,10 +181,19 @@ export default function AdminDashboard() {
         setServicesList(data.services || []);
       }
 
-      if (sessionsRes.ok) {
-        const data = await sessionsRes.json();
-        setSessionUsers(data.users || []);
-        setSessionVendors(data.vendors || []);
+      if (inquiriesRes.ok) {
+        const data = await inquiriesRes.json();
+        setInquiries(data.inquiries || []);
+      }
+
+      if (payoutsRes.ok) {
+        const data = await payoutsRes.json();
+        setPayoutsData(data);
+      }
+
+      if (reviewsRes.ok) {
+        const data = await reviewsRes.json();
+        setReviewsList(data.reviews || []);
       }
     } catch (err: any) {
       console.error("Failed to load admin dashboard data:", err);
@@ -331,10 +344,59 @@ export default function AdminDashboard() {
         fetchAllData();
       } else {
         notify(data.message || "Failed to update booking status.", "error");
+        // Confirming an unpaid booking is now rejected server-side. Refetch so
+        // the dropdown snaps back to the real status instead of showing a
+        // change that didn't happen.
+        fetchAllData();
       }
     } catch (err) {
       console.error(err);
       notify("Network error while updating booking.", "error");
+      fetchAllData();
+    }
+  };
+
+  /**
+   * Record a payment that arrived outside Stripe (bank transfer, cash, cheque).
+   * This is the only admin path that can mark a booking paid — status changes
+   * alone no longer imply money was received.
+   */
+  const handleRecordOfflinePayment = async (bookingId: string, suggestedAmount: number) => {
+    const entered = window.prompt(
+      "Record a payment received outside Stripe.\n\nAmount actually received (₹):",
+      String(suggestedAmount || "")
+    );
+    if (entered === null) return;
+
+    const amount = Number(entered.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      notify("Enter a valid amount.", "error");
+      return;
+    }
+
+    const note = window.prompt("Reference or note (optional) — e.g. UTR number, cheque no.", "") ?? "";
+
+    try {
+      const res = await fetch("/api/admin/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId,
+          recordOfflinePayment: true,
+          offlineAmount: amount,
+          offlineNote: note,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        notify("Payment recorded — booking confirmed");
+      } else {
+        notify(data.message || "Failed to record payment.", "error");
+      }
+      fetchAllData();
+    } catch (err) {
+      console.error(err);
+      notify("Network error while recording payment.", "error");
     }
   };
 
@@ -401,6 +463,88 @@ export default function AdminDashboard() {
         } catch (err) {
           console.error(err);
           notify("Network error while deleting user.", "error");
+        }
+      },
+    });
+  };
+
+  const handleUpdateInquiryStatus = async (inquiryId: string, status: string) => {
+    try {
+      const res = await fetch("/api/admin/inquiries", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inquiryId, status }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        notify("Inquiry status updated");
+        fetchAllData();
+      } else {
+        notify(data.message || "Failed to update inquiry status.", "error");
+      }
+    } catch (err) {
+      notify("Network error updating inquiry.", "error");
+    }
+  };
+
+  const handleDeleteInquiry = (inquiryId: string) => {
+    setConfirmDialog({
+      title: "Delete this inquiry?",
+      desc: "This message inquiry will be permanently deleted.",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/inquiries?inquiryId=${inquiryId}`, {
+            method: "DELETE",
+          });
+          if (res.ok) {
+            notify("Inquiry deleted");
+            fetchAllData();
+          } else {
+            notify("Failed to delete inquiry.", "error");
+          }
+        } catch (err) {
+          notify("Network error deleting inquiry.", "error");
+        }
+      },
+    });
+  };
+
+  const handleUpdatePayoutStatus = async (bookingId: string, payoutStatus: string, payoutRef?: string) => {
+    try {
+      const res = await fetch("/api/admin/payouts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, payoutStatus, payoutRef }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        notify(`Payout marked as ${payoutStatus}`);
+        fetchAllData();
+      } else {
+        notify(data.message || "Failed to update payout.", "error");
+      }
+    } catch (err) {
+      notify("Network error updating payout.", "error");
+    }
+  };
+
+  const handleDeleteReview = (vendorId: string, reviewId: string) => {
+    setConfirmDialog({
+      title: "Delete this review?",
+      desc: "This review will be permanently removed from the vendor profile.",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/reviews?vendorId=${vendorId}&reviewId=${reviewId}`, {
+            method: "DELETE",
+          });
+          if (res.ok) {
+            notify("Review removed");
+            fetchAllData();
+          } else {
+            notify("Failed to delete review.", "error");
+          }
+        } catch (err) {
+          notify("Network error deleting review.", "error");
         }
       },
     });
@@ -492,10 +636,11 @@ export default function AdminDashboard() {
   const catServices = (c: string) => servicesList.filter((s: any) => s.category === c);
   const categoryStats = [
     { id: "venues", label: "Venues", count: venuesList.length, live: venuesList.filter((v: any) => v.active).length },
-    { id: "rooms", label: "Rooms", count: catServices("rooms").length, live: catServices("rooms").filter((s: any) => s.active).length },
     { id: "planners", label: "Planners", count: catServices("planners").length, live: catServices("planners").filter((s: any) => s.active).length },
     { id: "caterers", label: "Caterers", count: catServices("caterers").length, live: catServices("caterers").filter((s: any) => s.active).length },
     { id: "decorators", label: "Decorators", count: catServices("decorators").length, live: catServices("decorators").filter((s: any) => s.active).length },
+    { id: "photography", label: "Photography", count: catServices("photography").length, live: catServices("photography").filter((s: any) => s.active).length },
+    { id: "rooms", label: "Rooms", count: catServices("rooms").length, live: catServices("rooms").filter((s: any) => s.active).length },
   ].sort((a, b) => b.count - a.count);
   const totalListings = venuesList.length + servicesList.length;
   const liveListings = categoryStats.reduce((sum, c) => sum + c.live, 0);
@@ -572,6 +717,16 @@ export default function AdminDashboard() {
     );
   });
 
+  const filteredPayouts = (payoutsData?.payouts || []).filter((p: any) => {
+    const val = searchTerm.toLowerCase();
+    return (
+      (p.providerName || "").toLowerCase().includes(val) ||
+      (p.userName || "").toLowerCase().includes(val) ||
+      (p.bookingType || "").toLowerCase().includes(val) ||
+      (p.payoutStatus || "").toLowerCase().includes(val)
+    );
+  });
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // ─── Toast notifications ───
@@ -641,8 +796,10 @@ export default function AdminDashboard() {
     { id: "approvals", label: "Approvals", count: pendingApprovals.length || null, icon: UserCheckIcon },
     { id: "vendors", label: "Vendors", count: vendors.length || null, icon: Building2 },
     { id: "users", label: "Customers", count: users.length || null, icon: UsersIcon },
+    { id: "inquiries", label: "Inquiries Queue", count: inquiries.filter(i => i.status === "new").length || null, icon: Mail },
+    { id: "reviews", label: "Reviews", count: reviewsList.length || null, icon: Star },
     { id: "bookings", label: "Bookings", count: bookings.length || null, icon: BookOpen },
-    { id: "sessions", label: "Logged-In Sessions", count: (sessionUsers.filter((u: any) => u.isOnline).length + sessionVendors.filter((v: any) => v.isOnline).length) || null, icon: Shield },
+    { id: "payouts", label: "Payouts & Revenue", count: payoutsData?.payouts?.length || null, icon: WalletIcon },
 
     { id: "settings", label: "Settings", count: null, icon: SettingsIcon },
     { id: "home", label: "Back to Home", icon: HomeIcon, href: "/" },
@@ -1118,10 +1275,6 @@ export default function AdminDashboard() {
                           <h4 className={`font-extrabold text-lg tracking-tight ${headingText}`}>Booking Activity</h4>
                           <p className="text-[11px] text-stone-400 font-semibold mt-0.5">Track total vs confirmed bookings</p>
                         </div>
-                        <button className={`flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold cursor-default ${isDarkMode ? "border-stone-800 text-stone-300" : "border-stone-200 text-stone-600"}`}>
-                          Last 6 months
-                          <ChevronDownIcon className="w-3.5 h-3.5 opacity-60" />
-                        </button>
                       </div>
 
                       {/* Legend */}
@@ -1180,15 +1333,6 @@ export default function AdminDashboard() {
                           <h4 className={`font-extrabold text-lg tracking-tight ${headingText}`}>Listing Statistics</h4>
                           <p className="text-[11px] text-stone-400 font-semibold mt-0.5">Track listings by category</p>
                         </div>
-                        <div className="relative shrink-0">
-                          <select className={`appearance-none bg-transparent flex items-center gap-2 pl-4 pr-8 py-2 rounded-full border text-xs font-bold cursor-pointer outline-none ${isDarkMode ? "border-stone-800 text-stone-300 bg-stone-900 focus:border-stone-600" : "border-stone-200 text-stone-600 bg-white focus:border-stone-400"}`}>
-                            <option value="all">All time</option>
-                            <option value="month">This Month</option>
-                            <option value="week">This Week</option>
-                            <option value="today">Today</option>
-                          </select>
-                          <ChevronDownIcon className="w-3.5 h-3.5 opacity-60 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
                       </div>
 
                       <div className="flex items-center gap-2 mt-5">
@@ -1230,15 +1374,6 @@ export default function AdminDashboard() {
                         <div>
                           <h4 className={`font-extrabold text-lg tracking-tight ${headingText}`}>Vendor Growth</h4>
                           <p className="text-[11px] text-stone-400 font-semibold mt-0.5">Track vendors by city</p>
-                        </div>
-                        <div className="relative shrink-0">
-                          <select className={`appearance-none bg-transparent flex items-center gap-2 pl-4 pr-8 py-2 rounded-full border text-xs font-bold cursor-pointer outline-none ${isDarkMode ? "border-stone-800 text-stone-300 bg-stone-900 focus:border-stone-600" : "border-stone-200 text-stone-600 bg-white focus:border-stone-400"}`}>
-                            <option value="all">All time</option>
-                            <option value="month">This Month</option>
-                            <option value="week">This Week</option>
-                            <option value="today">Today</option>
-                          </select>
-                          <ChevronDownIcon className="w-3.5 h-3.5 opacity-60 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
                       </div>
 
@@ -1533,7 +1668,7 @@ export default function AdminDashboard() {
                             <th className="p-4">Client Details</th>
                             <th className="p-4">Specifications</th>
                             <th className="p-4">Dates</th>
-                            <th className="p-4">Advance Paid</th>
+                            <th className="p-4">Amount / Payment</th>
                             <th className="p-4">Status</th>
                             <th className="p-4 text-center">Delete</th>
                           </tr>
@@ -1543,7 +1678,11 @@ export default function AdminDashboard() {
                             <tr key={b._id} className={`border-b last:border-0 transition-colors ${isDarkMode ? "border-stone-800 hover:bg-stone-900/40" : "border-stone-200 hover:bg-primary-50/20"
                               }`}>
                               <td className="p-4">
-                                <p className={`font-black text-sm leading-tight ${isDarkMode ? 'text-stone-200' : 'text-stone-800'}`}>{b.venueName}</p>
+                                {/* Bookings store the listing name as `providerName`; this read
+                                    `b.venueName`, which doesn't exist on the model, so the column
+                                    rendered blank and the ledger gave no clue which venue a
+                                    booking belonged to. */}
+                                <p className={`font-black text-sm leading-tight ${isDarkMode ? 'text-stone-200' : 'text-stone-800'}`}>{b.providerName || "—"}</p>
                                 <div className="flex items-center gap-1.5 mt-1">
                                   <span className="text-[9px] text-stone-400 font-mono">ID: {b._id.slice(0, 8)}...</span>
                                   <button
@@ -1584,9 +1723,31 @@ export default function AdminDashboard() {
                                   </div>
                                 )}
                               </td>
+                              {/* This column used to be headed "Advance Paid" while showing the
+                                  advance DUE — an unpaid booking displayed "Adv: ₹11,400" when
+                                  ₹0 had been collected. Paid vs due is now explicit. */}
                               <td className="p-4">
                                 <p className={`font-black ${isDarkMode ? 'text-stone-200' : 'text-stone-800'}`}>{formatAsCurrency(b.totalAmount, b.currency || "INR")}</p>
-                                <p className="text-[10px] text-stone-450 font-bold mt-0.5">Adv: {formatAsCurrency(b.advanceAmount, b.currency || "INR")}</p>
+                                {b.paymentStatus === "paid" ? (
+                                  <p className="text-[10px] font-bold mt-0.5 text-emerald-600 dark:text-emerald-400">
+                                    Paid: {formatAsCurrency(b.amountPaid || 0, b.currency || "INR")}
+                                    {b.paidMethod === "offline" && " (offline)"}
+                                  </p>
+                                ) : (
+                                  <div className="mt-0.5 space-y-1">
+                                    <p className="text-[10px] text-stone-450 font-bold">
+                                      Unpaid — adv due {formatAsCurrency(b.advanceAmount, b.currency || "INR")}
+                                    </p>
+                                    {b.status !== "cancelled" && (
+                                      <button
+                                        onClick={() => handleRecordOfflinePayment(b._id, b.advanceAmount)}
+                                        className="text-[9px] font-black uppercase tracking-wide px-2 py-0.5 rounded-md border border-stone-300 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:border-primary-400 hover:text-primary-600 transition-colors cursor-pointer"
+                                      >
+                                        Record payment
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </td>
                               <td className="p-4">
                                 <select
@@ -1708,103 +1869,327 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* ─── TAB: LOGGED-IN SESSIONS ─── */}
-              {activeTab === "sessions" && (
-                <div className="flex flex-col gap-6">
-                  {[
-                    { title: "Customer Sessions", sub: "Users who have logged in, most recent first", rows: sessionUsers, emptyLabel: "No customer logins recorded yet." },
-                    { title: "Vendor Sessions", sub: "Vendors who have logged in, most recent first", rows: sessionVendors, emptyLabel: "No vendor logins recorded yet." },
-                  ].map((group) => (
-                    <div key={group.title} className={`border rounded-3xl overflow-hidden p-6 shadow-none ${cardClass}`}>
-                      <div className={`flex justify-between items-center pb-4 border-b mb-6 ${dividerClass}`}>
-                        <div>
-                          <h3 className={`font-extrabold text-base ${headingText}`}>{group.title}</h3>
-                          <p className="text-[10px] text-stone-400 font-semibold mt-0.5">{group.sub}</p>
-                        </div>
-                      </div>
-
-                      {loadingData && group.rows.length === 0 ? (
-                        <div className="flex flex-col gap-3">
-                          {[...Array(3)].map((_, i) => (
-                            <div key={i} className={`h-14 rounded-2xl animate-pulse ${isDarkMode ? "bg-stone-800/60" : "bg-stone-100"}`} />
-                          ))}
-                        </div>
-                      ) : group.rows.length === 0 ? (
-                        <div className="py-16 flex flex-col items-center justify-center text-center gap-3">
-                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-stone-800" : "bg-stone-100"}`}>
-                            <Shield className="w-6 h-6 text-stone-400" />
-                          </div>
-                          <p className="text-xs text-stone-400 max-w-xs">{group.emptyLabel}</p>
-                        </div>
-                      ) : (
-                        <div className={`overflow-x-auto border rounded-2xl ${dividerClass}`}>
-                          <table className="w-full text-left text-xs border-collapse">
-                            <thead>
-                              <tr className={`border-b text-[10px] uppercase tracking-wider font-black text-stone-400 ${isDarkMode ? 'bg-stone-900/50' : 'bg-[#fafaf9]'}`}>
-                                <th className="p-4">Name</th>
-                                <th className="p-4">Email</th>
-                                <th className="p-4">Device</th>
-                                <th className="p-4">Login Method</th>
-                                <th className="p-4">Status</th>
-                                <th className="p-4">Last Login</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {group.rows.map((s: any) => (
-                                <tr key={s._id} className={`border-b last:border-0 transition-colors ${isDarkMode ? "border-stone-800 hover:bg-stone-900/40" : "border-stone-200 hover:bg-primary-50/20"}`}>
-                                  <td className="p-4">
-                                    <div className="flex items-center gap-3">
-                                      <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-black text-xs uppercase ${isDarkMode ? "bg-primary-500/15 text-primary-400" : "bg-primary-50 text-primary-600"}`}>
-                                        {(s.businessName || s.name || "?").slice(0, 1)}
-                                      </div>
-                                      <span className={`font-black text-sm ${isDarkMode ? 'text-stone-200' : 'text-stone-800'}`}>{s.businessName || s.name}</span>
-                                    </div>
-                                  </td>
-                                  <td className={`p-4 font-semibold ${isDarkMode ? 'text-stone-300' : 'text-stone-700'}`}>{s.email}</td>
-                                  <td className={`p-4 font-medium ${isDarkMode ? 'text-stone-300' : 'text-stone-700'}`}>
-                                    <span className="inline-flex items-center gap-1.5">
-                                      {s.lastLoginDevice?.includes("Mobile") ? (
-                                        <Smartphone className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                                      ) : s.lastLoginDevice?.includes("Tablet") ? (
-                                        <Tablet className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                                      ) : (
-                                        <Monitor className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                                      )}
-                                      {s.lastLoginDevice || "Unknown Device"}
-                                    </span>
-                                  </td>
-                                  <td className={`p-4 font-medium ${isDarkMode ? 'text-stone-300' : 'text-stone-700'}`}>
-                                    <span className="inline-flex items-center gap-1.5">
-                                      {s.lastLoginMethod === "google" ? (
-                                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-                                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                                        </svg>
-                                      ) : (
-                                        <KeyRound className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                                      )}
-                                      {s.lastLoginMethod === "google" ? "Google" : s.lastLoginMethod === "password" ? "Email/Password" : "Unknown"}
-                                    </span>
-                                  </td>
-                                  <td className="p-4">
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black ${s.isOnline ? "bg-green-500/10 text-green-600" : "bg-stone-500/10 text-stone-500"}`}>
-                                      <span className={`w-1.5 h-1.5 rounded-full ${s.isOnline ? "bg-green-500" : "bg-stone-400"}`} />
-                                      {s.isOnline ? "Online" : "Offline"}
-                                    </span>
-                                  </td>
-                                  <td className="p-4 text-stone-500 font-semibold">{formatDate(s.lastLoginAt)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+              {/* ─── TAB: INQUIRIES QUEUE ─── */}
+              {activeTab === "inquiries" && (
+                <div className={`border rounded-3xl overflow-hidden p-6 shadow-none ${cardClass}`}>
+                  <div className={`flex flex-col md:flex-row md:items-center justify-between pb-4 border-b mb-6 gap-4 ${dividerClass}`}>
+                    <div>
+                      <h3 className={`font-extrabold text-base ${headingText}`}>Customer Inquiries Queue</h3>
+                      <p className="text-[10px] text-stone-400 font-semibold mt-0.5">Manage customer inquiries, quote requests, and support messages</p>
                     </div>
-                  ))}
+
+                    {/* Status Filter Pills */}
+                    <div className="flex items-center gap-1.5 p-1 rounded-2xl border border-stone-200 dark:border-stone-800 bg-stone-100/50 dark:bg-stone-900/50">
+                      {["all", "new", "responded", "closed"].map((st) => (
+                        <button
+                          key={st}
+                          onClick={() => setInquiryStatusFilter(st)}
+                          className={`px-3 py-1 rounded-xl text-[10px] font-black capitalize transition-all cursor-pointer ${inquiryStatusFilter === st
+                            ? "bg-primary-500 text-white shadow-sm"
+                            : "text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white"
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const filteredInquiries = inquiries.filter((inq) => {
+                      const matchesStatus = inquiryStatusFilter === "all" || inq.status === inquiryStatusFilter;
+                      const q = searchTerm.toLowerCase();
+                      const matchesSearch = !q || 
+                        inq.firstName?.toLowerCase().includes(q) ||
+                        inq.lastName?.toLowerCase().includes(q) ||
+                        inq.email?.toLowerCase().includes(q) ||
+                        inq.message?.toLowerCase().includes(q);
+                      return matchesStatus && matchesSearch;
+                    });
+
+                    return loadingData && filteredInquiries.length === 0 ? (
+                      <div className="flex flex-col gap-3">
+                        {[...Array(4)].map((_, i) => (
+                          <div key={i} className={`h-16 rounded-2xl animate-pulse ${isDarkMode ? "bg-stone-800/60" : "bg-stone-100"}`} />
+                        ))}
+                      </div>
+                    ) : filteredInquiries.length === 0 ? (
+                      <div className="py-20 flex flex-col items-center justify-center text-center gap-3">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-stone-800" : "bg-stone-100"}`}>
+                          <Mail className="w-6 h-6 text-stone-400" />
+                        </div>
+                        <h4 className={`font-bold text-sm ${headingText}`}>No inquiries found</h4>
+                        <p className="text-xs text-stone-400 max-w-xs">There are no customer inquiries matching your selected filter.</p>
+                      </div>
+                    ) : (
+                      <div className={`overflow-x-auto border rounded-2xl ${dividerClass}`}>
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className={`border-b text-[10px] uppercase tracking-wider font-black text-stone-400 ${isDarkMode ? 'bg-stone-900/50' : 'bg-[#fafaf9]'}`}>
+                              <th className="p-4">Customer</th>
+                              <th className="p-4">Contact</th>
+                              <th className="p-4">Message</th>
+                              <th className="p-4">Date</th>
+                              <th className="p-4">Status</th>
+                              <th className="p-4 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginate(filteredInquiries).map((inq: any) => (
+                              <tr key={inq._id} className={`border-b last:border-0 transition-colors ${isDarkMode ? "border-stone-800 hover:bg-stone-900/40" : "border-stone-200 hover:bg-primary-50/20"}`}>
+                                <td className="p-4 font-black">
+                                  <p className={isDarkMode ? 'text-stone-200' : 'text-stone-800'}>{inq.firstName} {inq.lastName}</p>
+                                </td>
+                                <td className="p-4">
+                                  <p className={`font-semibold ${isDarkMode ? 'text-stone-300' : 'text-stone-700'}`}>{inq.email}</p>
+                                  {inq.phone && <p className="text-[10px] text-stone-400 mt-0.5">{inq.phone}</p>}
+                                </td>
+                                <td className="p-4 max-w-xs">
+                                  <p className={`text-xs font-medium line-clamp-2 ${isDarkMode ? 'text-stone-300' : 'text-stone-600'}`}>{inq.message}</p>
+                                </td>
+                                <td className="p-4 text-stone-500 font-semibold">{formatDate(inq.createdAt)}</td>
+                                <td className="p-4">
+                                  <select
+                                    value={inq.status || "new"}
+                                    onChange={(e) => handleUpdateInquiryStatus(inq._id, e.target.value)}
+                                    className={`text-[10px] font-black rounded-xl border px-2.5 py-1 outline-none cursor-pointer ${
+                                      inq.status === "responded"
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900"
+                                        : inq.status === "closed"
+                                        ? "bg-stone-100 text-stone-600 border-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:border-stone-700"
+                                        : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900"
+                                    }`}
+                                  >
+                                    <option value="new">New</option>
+                                    <option value="responded">Responded</option>
+                                    <option value="closed">Closed</option>
+                                  </select>
+                                </td>
+                                <td className="p-4 text-center">
+                                  <button
+                                    onClick={() => handleDeleteInquiry(inq._id)}
+                                    title="Delete inquiry"
+                                    className={`p-2 rounded-xl transition-colors cursor-pointer ${isDarkMode ? "text-stone-500 hover:text-red-400 hover:bg-red-500/10" : "text-stone-400 hover:text-red-600 hover:bg-red-50"}`}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                  <TablePager total={inquiries.length} />
                 </div>
               )}
+
+              {/* ─── TAB: PAYOUTS & REVENUE ─── */}
+              {activeTab === "payouts" && (
+                <div className="flex flex-col gap-6">
+                  {/* Revenue Summary Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className={`p-5 rounded-3xl border ${cardClass}`}>
+                      <p className="text-[10px] font-black uppercase text-stone-400 tracking-wider">Gross Booking Volume</p>
+                      <p className={`text-xl font-extrabold mt-2 ${headingText}`}>
+                        {formatAsCurrency(payoutsData?.stats?.totalGrossVolume || 0, "INR")}
+                      </p>
+                      <p className="text-[10px] text-stone-400 font-semibold mt-1">Total value of all confirmed bookings</p>
+                    </div>
+
+                    <div className={`p-5 rounded-3xl border ${cardClass}`}>
+                      <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">Platform Commission (15%)</p>
+                      <p className="text-xl font-extrabold mt-2 text-emerald-600 dark:text-emerald-400">
+                        {formatAsCurrency(payoutsData?.stats?.totalCommission || 0, "INR")}
+                      </p>
+                      <p className="text-[10px] text-stone-400 font-semibold mt-1">SoulsWed platform earnings</p>
+                    </div>
+
+                    <div className={`p-5 rounded-3xl border ${cardClass}`}>
+                      <p className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">Pending Vendor Payouts</p>
+                      <p className="text-xl font-extrabold mt-2 text-amber-600 dark:text-amber-400">
+                        {formatAsCurrency(payoutsData?.stats?.pendingPayoutsAmount || 0, "INR")}
+                      </p>
+                      <p className="text-[10px] text-stone-400 font-semibold mt-1">Awaiting bank transfer release</p>
+                    </div>
+
+                    <div className={`p-5 rounded-3xl border ${cardClass}`}>
+                      <p className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-wider">Released Payouts</p>
+                      <p className="text-xl font-extrabold mt-2 text-blue-600 dark:text-blue-400">
+                        {formatAsCurrency(payoutsData?.stats?.releasedPayoutsAmount || 0, "INR")}
+                      </p>
+                      <p className="text-[10px] text-stone-400 font-semibold mt-1">Successfully remitted to vendors</p>
+                    </div>
+                  </div>
+
+                  {/* Payout Ledger Table */}
+                  <div className={`border rounded-3xl overflow-hidden p-6 shadow-none ${cardClass}`}>
+                    <div className={`flex justify-between items-center pb-4 border-b mb-6 ${dividerClass}`}>
+                      <div>
+                        <h3 className={`font-extrabold text-base ${headingText}`}>Vendor Payout Ledger</h3>
+                        <p className="text-[10px] text-stone-400 font-semibold mt-0.5">Track vendor net earnings, platform commission deductions, and release payouts</p>
+                      </div>
+                    </div>
+
+                    {loadingData && !payoutsData ? (
+                      <div className="flex flex-col gap-3">
+                        {[...Array(4)].map((_, i) => (
+                          <div key={i} className={`h-14 rounded-2xl animate-pulse ${isDarkMode ? "bg-stone-800/60" : "bg-stone-100"}`} />
+                        ))}
+                      </div>
+                    ) : !payoutsData?.payouts || payoutsData.payouts.length === 0 ? (
+                      <div className="py-20 flex flex-col items-center justify-center text-center gap-3">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-stone-800" : "bg-stone-100"}`}>
+                          <WalletIcon className="w-6 h-6 text-stone-400" />
+                        </div>
+                        <h4 className={`font-bold text-sm ${headingText}`}>No payouts recorded</h4>
+                        <p className="text-xs text-stone-400 max-w-xs">Payout records will automatically appear when bookings are confirmed or completed.</p>
+                      </div>
+                    ) : filteredPayouts.length === 0 ? (
+                      <div className="py-20 flex flex-col items-center justify-center text-center gap-3">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-stone-800" : "bg-stone-100"}`}>
+                          <SearchX className="w-6 h-6 text-stone-400" />
+                        </div>
+                        <h4 className={`font-bold text-sm ${headingText}`}>No matching payouts</h4>
+                        <p className="text-xs text-stone-400 max-w-xs">No vendor, customer, or status matches "{searchTerm}".</p>
+                      </div>
+                    ) : (
+                      <div className={`overflow-x-auto border rounded-2xl ${dividerClass}`}>
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className={`border-b text-[10px] uppercase tracking-wider font-black text-stone-400 ${isDarkMode ? 'bg-stone-900/50' : 'bg-[#fafaf9]'}`}>
+                              <th className="p-4">Vendor Partner</th>
+                              <th className="p-4">Customer</th>
+                              <th className="p-4">Gross Total</th>
+                              <th className="p-4">Platform Fee (15%)</th>
+                              <th className="p-4">Net Vendor Payout</th>
+                              <th className="p-4">Payout Status</th>
+                              <th className="p-4 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginate(filteredPayouts).map((p: any) => (
+                              <tr key={p.bookingId} className={`border-b last:border-0 transition-colors ${isDarkMode ? "border-stone-800 hover:bg-stone-900/40" : "border-stone-200 hover:bg-primary-50/20"}`}>
+                                <td className="p-4">
+                                  <p className={`font-black text-sm ${isDarkMode ? 'text-stone-200' : 'text-stone-800'}`}>{p.providerName}</p>
+                                  <p className="text-[10px] text-stone-400 font-semibold uppercase">{p.bookingType}</p>
+                                </td>
+                                <td className={`p-4 font-semibold ${isDarkMode ? 'text-stone-300' : 'text-stone-700'}`}>{p.userName}</td>
+                                <td className={`p-4 font-black ${isDarkMode ? 'text-stone-200' : 'text-stone-800'}`}>{formatAsCurrency(p.totalAmount, "INR")}</td>
+                                <td className="p-4 font-bold text-emerald-600 dark:text-emerald-400">{formatAsCurrency(p.commissionAmount, "INR")}</td>
+                                <td className="p-4 font-extrabold text-primary-600 dark:text-primary-400">{formatAsCurrency(p.netVendorPayout, "INR")}</td>
+                                <td className="p-4">
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border ${
+                                    p.payoutStatus === "released"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900"
+                                      : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900"
+                                  }`}>
+                                    {p.payoutStatus === "released" ? "Released" : "Pending"}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-center">
+                                  <button
+                                    onClick={() => handleUpdatePayoutStatus(p.bookingId, p.payoutStatus === "released" ? "pending" : "released")}
+                                    className={`px-3 py-1 rounded-xl text-[10px] font-black border transition-all cursor-pointer ${
+                                      p.payoutStatus === "released"
+                                        ? "bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-400 dark:border-stone-700"
+                                        : "bg-primary-500 text-white border-primary-500 hover:bg-primary-600"
+                                    }`}
+                                  >
+                                    {p.payoutStatus === "released" ? "Mark Pending" : "Release Payout"}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    <TablePager total={filteredPayouts.length} />
+                  </div>
+                </div>
+              )}
+
+              {/* ─── TAB: REVIEWS MODERATION ─── */}
+              {activeTab === "reviews" && (
+                <div className={`border rounded-3xl overflow-hidden p-6 shadow-none ${cardClass}`}>
+                  <div className={`flex justify-between items-center pb-4 border-b mb-6 ${dividerClass}`}>
+                    <div>
+                      <h3 className={`font-extrabold text-base ${headingText}`}>Customer Reviews Moderation</h3>
+                      <p className="text-[10px] text-stone-400 font-semibold mt-0.5">Audit, verify, and moderate customer ratings and review submissions</p>
+                    </div>
+                  </div>
+
+                  {loadingData && reviewsList.length === 0 ? (
+                    <div className="flex flex-col gap-3">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className={`h-16 rounded-2xl animate-pulse ${isDarkMode ? "bg-stone-800/60" : "bg-stone-100"}`} />
+                      ))}
+                    </div>
+                  ) : reviewsList.length === 0 ? (
+                    <div className="py-20 flex flex-col items-center justify-center text-center gap-3">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-stone-800" : "bg-stone-100"}`}>
+                        <Star className="w-6 h-6 text-stone-400" />
+                      </div>
+                      <h4 className={`font-bold text-sm ${headingText}`}>No reviews found</h4>
+                      <p className="text-xs text-stone-400 max-w-xs">No vendor reviews have been posted yet.</p>
+                    </div>
+                  ) : (
+                    <div className={`overflow-x-auto border rounded-2xl ${dividerClass}`}>
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className={`border-b text-[10px] uppercase tracking-wider font-black text-stone-400 ${isDarkMode ? 'bg-stone-900/50' : 'bg-[#fafaf9]'}`}>
+                            <th className="p-4">Author</th>
+                            <th className="p-4">Target Vendor</th>
+                            <th className="p-4">Rating</th>
+                            <th className="p-4">Review Comment</th>
+                            <th className="p-4">Date</th>
+                            <th className="p-4 text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginate(reviewsList).map((r: any) => (
+                            <tr key={r.reviewId} className={`border-b last:border-0 transition-colors ${isDarkMode ? "border-stone-800 hover:bg-stone-900/40" : "border-stone-200 hover:bg-primary-50/20"}`}>
+                              <td className="p-4 font-black">
+                                <p className={isDarkMode ? 'text-stone-200' : 'text-stone-800'}>{r.author}</p>
+                              </td>
+                              <td className="p-4 font-bold text-primary-600 dark:text-primary-400">{r.vendorName}</td>
+                              <td className="p-4">
+                                <div className="flex items-center gap-1">
+                                  {[...Array(5)].map((_, idx) => (
+                                    <Star
+                                      key={idx}
+                                      className={`w-3.5 h-3.5 ${idx < r.rating ? "text-amber-400 fill-amber-400" : "text-stone-300 dark:text-stone-700"}`}
+                                    />
+                                  ))}
+                                  <span className="text-[10px] font-extrabold ml-1">{r.rating}</span>
+                                </div>
+                              </td>
+                              <td className="p-4 max-w-xs">
+                                <p className={`text-xs font-medium line-clamp-2 ${isDarkMode ? 'text-stone-300' : 'text-stone-600'}`}>{r.text}</p>
+                              </td>
+                              <td className="p-4 text-stone-500 font-semibold">{formatDate(r.date)}</td>
+                              <td className="p-4 text-center">
+                                <button
+                                  onClick={() => handleDeleteReview(r.vendorId, r.reviewId)}
+                                  title="Delete review"
+                                  className={`p-2 rounded-xl transition-colors cursor-pointer ${isDarkMode ? "text-stone-500 hover:text-red-400 hover:bg-red-500/10" : "text-stone-400 hover:text-red-600 hover:bg-red-50"}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <TablePager total={reviewsList.length} />
+                </div>
+              )}
+
+
 
               {/* ─── TAB: SETTINGS ─── */}
               {activeTab === "settings" && (

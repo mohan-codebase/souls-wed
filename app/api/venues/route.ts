@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
 import { sanitizeMediaList, toVideoEmbedUrl } from "@/lib/media";
+import { guestsFilter, mergeFilters, unavailableProviderIds } from "@/lib/search/filters";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET — public (active only); vendors/admins see all including inactive
@@ -58,10 +59,45 @@ export async function GET(req: Request) {
       ];
     }
 
+    // ── Hero-search filters (docs/hero-search-analysis.md §8) ──
+    const toInt = (raw: string | null) => {
+      const n = Number.parseInt(raw ?? "", 10);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const guests = toInt(searchParams.get("guests"));
+    const budget = toInt(searchParams.get("budget"));
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+
+    const filtered = mergeFilters(query, guestsFilter(guests));
+
     const limit = parseInt(searchParams.get("limit") ?? "100");
     const skip  = parseInt(searchParams.get("skip")  ?? "0");
 
-    const venues = await Venue.find(query).limit(limit).skip(skip).lean();
+    let venues = await Venue.find(filtered).limit(limit).skip(skip).lean();
+
+    if (budget) {
+      // Venue prices are free-text strings ("₹2,50,000"), so this bound has to
+      // be applied after the query rather than inside it.
+      const parsePrice = (value: unknown): number | null => {
+        if (typeof value === "number") return value > 0 ? value : null;
+        if (typeof value !== "string") return null;
+        const n = Number.parseFloat(value.replace(/[₹,\s]/g, ""));
+        return Number.isNaN(n) ? null : n;
+      };
+      venues = venues.filter((v: Record<string, unknown>) => {
+        const price = parsePrice(v.price) ?? parsePrice(v.pricePerPlateVeg);
+        return price == null || price <= budget;
+      });
+    }
+
+    if (start) {
+      const booked = await unavailableProviderIds(start, end);
+      if (booked.size > 0) {
+        venues = venues.filter((v: Record<string, unknown>) => !booked.has(String(v.venueId)));
+      }
+    }
+
     return NextResponse.json({ success: true, venues, total: venues.length });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

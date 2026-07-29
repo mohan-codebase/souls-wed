@@ -174,6 +174,25 @@ const Heart = ({ className, fill = "none" }: { className?: string, fill?: string
   </svg>
 );
 
+const BookingsIcon = ({ className }: { className?: string }) => (
+  <svg
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+    <line x1="16" x2="16" y1="2" y2="6" />
+    <line x1="8" x2="8" y1="2" y2="6" />
+    <line x1="3" x2="21" y1="10" y2="10" />
+    <path d="m9 16 2 2 4-4" />
+  </svg>
+);
+
 // --- NAVIGATION CONFIG ---
 
 const navLinks = [
@@ -216,10 +235,9 @@ function DropdownMenu({ columns }: { columns: { title: string; items: { label: s
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-max min-w-[280px] rounded-[24px] z-50 p-6 flex flex-col gap-6 before:absolute before:-top-6 before:left-0 before:w-full before:h-6 before:bg-transparent"
       style={{
-        background: "var(--sw-nav-default)",
-        backdropFilter: "blur(20px)",
-        border: "1px solid rgba(238,116,41,0.15)",
-        boxShadow: "0 24px 60px rgba(238,116,41,0.12)",
+        background: "var(--sw-nav-solid)",
+        border: "1px solid rgba(238,116,41,0.2)",
+        boxShadow: "0 20px 50px rgba(0, 0, 0, 0.22)",
       }}
       onMouseLeave={() => setHoveredItem(null)}
     >
@@ -623,22 +641,157 @@ export default function Navbar() {
                 </AnimatePresence>
               </div>
 
-              {/* Login / My Account */}
-              <Link
-                href={user ? (user.role === "admin" ? "/admin/dashboard" : user.role === "vendor" ? "/vendor/dashboard" : "/dashboard") : "/login"}
-                className="relative text-sm font-extrabold px-7 py-3 rounded-full text-white transition-all duration-300 overflow-hidden group flex items-center gap-2"
-                style={{ background: "var(--sw-primary)" }}
-              >
-                {user && user.profileImage ? (
-                  user.profileImage.startsWith("/") || user.profileImage.startsWith("http") || user.profileImage.startsWith("data:") ? (
-                    <img src={user.profileImage} alt="" className="w-6 h-6 rounded-full object-cover border border-white/30 relative z-10" />
-                  ) : (
-                    <span className="relative z-10 text-base leading-none">{user.profileImage}</span>
-                  )
-                ) : null}
-                <span className="relative z-10">{user ? "My Account" : "Login"}</span>
-                <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent group-hover:animate-[navbar-shimmer_1.5s_infinite] z-0" />
-              </Link>
+              {/* User Profile Avatar / Login */}
+              {user ? (
+                <div
+                  className="relative"
+                  ref={accountRef}
+                  onMouseEnter={() => {
+                    setOpenDropdown("account");
+                    setHoveredPath("account");
+                  }}
+                  onMouseLeave={() => {
+                    setOpenDropdown(null);
+                    setHoveredPath(null);
+                  }}
+                >
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === "account" ? null : "account")}
+                    className="relative flex items-center gap-2 p-1 pl-1.5 pr-3 rounded-full transition-all duration-300 group z-10 bg-white/90 hover:bg-white border border-slate-200/90 shadow-sm"
+                    title={user.name}
+                  >
+                    {user.profileImage && (user.profileImage.startsWith("/") || user.profileImage.startsWith("http") || user.profileImage.startsWith("data:")) ? (
+                      <img src={user.profileImage} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-primary-500/30 shrink-0" />
+                    ) : user.profileImage && user.profileImage.length <= 10 ? (
+                      <span className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold flex items-center justify-center text-xs shrink-0">
+                        {user.profileImage}
+                      </span>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-primary-500 flex items-center justify-center text-white font-black text-xs shadow-sm shrink-0">
+                        {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
+                      </div>
+                    )}
+                    <span className="text-xs font-extrabold text-slate-800 max-w-[90px] truncate hidden sm:inline-block">
+                      {user.name ? user.name.split(" ")[0] : "Account"}
+                    </span>
+                    <ChevronDown
+                      className="w-3.5 h-3.5 text-slate-500 transition-transform duration-300 group-hover:text-primary-600 shrink-0"
+                      style={{
+                        transform: openDropdown === "account" ? "rotate(180deg)" : "rotate(0deg)",
+                      }}
+                    />
+                  </button>
+
+                  <AnimatePresence>
+                    {openDropdown === "account" && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                        className="absolute top-full right-0 mt-3 w-80 rounded-[28px] p-4 z-50 flex flex-col gap-2 before:absolute before:-top-4 before:left-0 before:w-full before:h-4 before:bg-transparent shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-slate-100 bg-white/95 backdrop-blur-xl text-slate-800"
+                      >
+                        {/* Profile Header banner */}
+                        <div className="px-3.5 py-2.5 rounded-2xl bg-primary-50/60 border border-primary-100/80 mb-1">
+                          <p className="text-[11px] font-extrabold text-primary-600 leading-tight">
+                            You are viewing your personal profile
+                          </p>
+                          <p className="text-xs font-semibold text-slate-600 truncate mt-0.5">
+                            {user.email}
+                          </p>
+                        </div>
+
+                        {/* My Profile */}
+                        <Link
+                          href={user.role === "admin" ? "/admin/dashboard" : user.role === "vendor" ? "/vendor/dashboard" : "/dashboard"}
+                          onClick={() => setOpenDropdown(null)}
+                          className="flex items-start gap-3 p-2.5 rounded-2xl transition-all duration-200 hover:bg-slate-50 group"
+                        >
+                          <div className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-primary-500 group-hover:text-white transition-colors">
+                            <UserIcon className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-xs font-extrabold text-slate-900 group-hover:text-primary-600 transition-colors">My Profile</h5>
+                            <p className="text-[11px] text-slate-500 leading-tight font-medium mt-0.5">
+                              Manage profile, login details & password
+                            </p>
+                          </div>
+                        </Link>
+
+                        {/* Wishlist */}
+                        <Link
+                          href="/wishlist"
+                          onClick={() => setOpenDropdown(null)}
+                          className="flex items-start gap-3 p-2.5 rounded-2xl transition-all duration-200 hover:bg-slate-50 group"
+                        >
+                          <div className="w-9 h-9 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-red-500 group-hover:text-white transition-colors">
+                            <Heart className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <h5 className="text-xs font-extrabold text-slate-900 group-hover:text-red-600 transition-colors">Wishlist</h5>
+                              {mounted && wishlistItems.length > 0 ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-600">
+                                  {wishlistItems.length}
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-600">
+                                  New
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 leading-tight font-medium mt-0.5">
+                              Save favorite hotels, venues & plan trip
+                            </p>
+                          </div>
+                        </Link>
+
+                        {/* My Bookings / Trips */}
+                        <Link
+                          href={user.role === "admin" ? "/admin/dashboard" : user.role === "vendor" ? "/vendor/dashboard" : "/dashboard?tab=bookings"}
+                          onClick={() => setOpenDropdown(null)}
+                          className="flex items-start gap-3 p-2.5 rounded-2xl transition-all duration-200 hover:bg-slate-50 group"
+                        >
+                          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                            <BookingsIcon className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-xs font-extrabold text-slate-900 group-hover:text-amber-600 transition-colors">My Bookings</h5>
+                            <p className="text-[11px] text-slate-500 leading-tight font-medium mt-0.5">
+                              See booking details, status & manage
+                            </p>
+                          </div>
+                        </Link>
+
+                        <div className="h-px bg-slate-100 my-1" />
+
+                        {/* Sign Out */}
+                        <button
+                          onClick={() => {
+                            setOpenDropdown(null);
+                            handleLogout();
+                          }}
+                          className="flex items-center gap-3 p-2.5 rounded-2xl w-full text-left transition-all duration-200 hover:bg-red-50 text-red-600 group"
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-red-100/60 text-red-600 flex items-center justify-center shrink-0 group-hover:bg-red-600 group-hover:text-white transition-colors">
+                            <LogOut className="w-4 h-4" />
+                          </div>
+                          <span className="text-xs font-extrabold">Sign Out</span>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="relative text-sm font-extrabold px-7 py-3 rounded-full text-white transition-all duration-300 overflow-hidden group flex items-center gap-2"
+                  style={{ background: "var(--sw-primary)" }}
+                >
+                  <span className="relative z-10">Login</span>
+                  <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent group-hover:animate-[navbar-shimmer_1.5s_infinite] z-0" />
+                </Link>
+              )}
             </div>
 
             {/* Mobile hamburger */}
@@ -699,48 +852,71 @@ export default function Navbar() {
                 <div className="h-10 bg-slate-100 rounded-full animate-pulse"/>
               ) : user ? (
                 <>
-                  <div className="px-3 py-2 flex items-center gap-3">
+                  <div className="px-3.5 py-3 rounded-2xl bg-primary-50/70 border border-primary-100/80 flex items-center gap-3">
                     {user.profileImage && (user.profileImage.startsWith("/") || user.profileImage.startsWith("http") || user.profileImage.startsWith("data:")) ? (
-                      <div className="w-9 h-9 rounded-full overflow-hidden shadow-sm border border-white/20">
+                      <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm border-2 border-white shrink-0">
                         <img src={user.profileImage} alt="" className="w-full h-full object-cover" />
                       </div>
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-400 shadow-sm border border-white/20">
-                        <UserIcon className="w-5 h-5" />
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-primary-500 flex items-center justify-center text-white font-black text-sm shadow-sm shrink-0">
+                        {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-5 h-5" />}
                       </div>
                     )}
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{user.name}</p>
-                      <p className="text-xs text-slate-500 capitalize">{user.role} Profile</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-extrabold text-primary-600 leading-tight">You are viewing your personal profile</p>
+                      <p className="text-xs font-bold text-slate-800 truncate mt-0.5">{user.email}</p>
                     </div>
                   </div>
+
                   <Link
                     href={user.role === "admin" ? "/admin/dashboard" : user.role === "vendor" ? "/vendor/dashboard" : "/dashboard"}
-                    className="font-semibold text-sm py-2.5 px-4 rounded-full text-center border transition-colors hover:bg-primary-50 flex items-center justify-center gap-2"
-                    style={{ color: "var(--sw-navy)", borderColor: "var(--sw-light-gray)" }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-slate-50 group"
                     onClick={() => setMobileOpen(false)}
                   >
-                    <LayoutDashboard className="w-4 h-4 text-primary-500" />
-                    <span>Dashboard</span>
+                    <div className="w-8 h-8 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
+                      <UserIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-extrabold text-slate-900">My Profile</p>
+                      <p className="text-[10px] text-slate-500 font-medium">Manage profile & password</p>
+                    </div>
                   </Link>
 
                   {/* Mobile Wishlist Option */}
                   <Link
                     href="/wishlist"
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center justify-between px-3 py-3 rounded-xl transition-colors hover:bg-slate-50 group"
+                    className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors hover:bg-slate-50 group"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-red-50 transition-colors">
-                        <Heart className="w-4 h-4 text-slate-500 group-hover:text-red-500 transition-colors" />
+                      <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center">
+                        <Heart className="w-4 h-4" />
                       </div>
-                      <span className="text-sm font-semibold text-[var(--sw-navy)]">My Wishlist</span>
+                      <div>
+                        <p className="text-xs font-extrabold text-slate-900">Wishlist</p>
+                        <p className="text-[10px] text-slate-500 font-medium">Saved venues & services</p>
+                      </div>
                     </div>
                     {mounted && wishlistItems.length > 0 && (
                       <span className="flex items-center justify-center min-w-[20px] h-[20px] px-1.5 bg-red-500 text-white text-[11px] font-bold rounded-full shadow-sm">
                         {wishlistItems.length}
                       </span>
                     )}
+                  </Link>
+
+                  {/* Mobile Bookings Option */}
+                  <Link
+                    href={user.role === "admin" ? "/admin/dashboard" : user.role === "vendor" ? "/vendor/dashboard" : "/dashboard?tab=bookings"}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-slate-50 group"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                      <BookingsIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-extrabold text-slate-900">My Bookings</p>
+                      <p className="text-[10px] text-slate-500 font-medium">Booking details & inquiries</p>
+                    </div>
                   </Link>
 
                   <div className="h-px bg-slate-100 my-1 mx-3" />
@@ -750,7 +926,7 @@ export default function Navbar() {
                       handleLogout();
                       setMobileOpen(false);
                     }}
-                    className="font-bold text-sm py-2.5 px-4 rounded-full text-center text-white bg-red-500 hover:bg-red-600 flex items-center justify-center gap-2 cursor-pointer"
+                    className="font-bold text-xs py-2.5 px-4 rounded-full text-center text-white bg-red-500 hover:bg-red-600 flex items-center justify-center gap-2 cursor-pointer mt-1"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign Out</span>

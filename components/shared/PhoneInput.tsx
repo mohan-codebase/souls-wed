@@ -87,7 +87,7 @@ export function PhoneInput({ value, defaultValue = "", onChange, placeholder = "
         value={localNumber}
         onChange={handleLocalNumberChange}
         disabled={disabled}
-        className="w-full h-12 pl-[135px] pr-4 bg-white/5 border border-stone-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-[var(--sw-primary)] transition-all dark:text-white"
+        className="w-full h-10 text-xs pl-[135px] pr-4 bg-white/5 border border-stone-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-[var(--sw-primary)] transition-all dark:text-white font-semibold"
       />
       {name && (
         <input type="hidden" name={name} value={dialCode + localNumber} />

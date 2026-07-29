@@ -43,7 +43,7 @@ export default function VendorCategoryPage() {
   useEffect(() => {
     setFetchLoading(true);
     setFetchError(null);
-    const isService = ["planners", "caterers", "decorators"].includes(categoryParam);
+    const isService = ["planners", "caterers", "decorators", "photography", "rooms"].includes(categoryParam);
     const apiPath = isService ? "/api/services" : "/api/vendors";
 
     fetch(`${apiPath}?category=${categoryParam}`)

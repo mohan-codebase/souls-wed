@@ -84,10 +84,12 @@ export default function VenueCard({ venue, view = "grid" }: VenueCardProps) {
                   <UsersIcon className="w-4 h-4 text-slate-400 dark:text-stone-500" />
                   <span>{venue.minGuests}-{venue.maxGuests} pax</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-stone-300">
-                  <BedDouble className="w-4 h-4 text-slate-400 dark:text-stone-500" />
-                  <span>{venue.rooms} Rooms</span>
-                </div>
+                {venue.rooms > 0 && (
+                  <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-stone-300">
+                    <BedDouble className="w-4 h-4 text-slate-400 dark:text-stone-500" />
+                    <span>{venue.rooms} Rooms</span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-end justify-between pt-4 border-t border-slate-50 dark:border-white/10">
@@ -138,10 +140,12 @@ export default function VenueCard({ venue, view = "grid" }: VenueCardProps) {
                 <UsersIcon className="w-3.5 h-3.5 text-slate-500" />
                 {venue.minGuests}-{venue.maxGuests} pax
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-white text-slate-700">
-                <BedDouble className="w-3.5 h-3.5 text-slate-500" />
-                {venue.rooms} Rooms
-              </div>
+              {venue.rooms > 0 && (
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-white text-slate-700">
+                  <BedDouble className="w-3.5 h-3.5 text-slate-500" />
+                  {venue.rooms} Rooms
+                </div>
+              )}
               <div
                 className="flex items-center text-[11px] font-bold px-3 py-1.5 rounded-full bg-white"
                 style={{ color: "var(--sw-primary)" }}

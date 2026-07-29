@@ -56,10 +56,11 @@ const aboutLinks = [
 
 const services = [
   { label: "Venues & Banquet Halls", href: "/venues" },
-  { label: "Rooms & Accommodation", href: "/rooms" },
   { label: "Wedding Planners", href: "/planners" },
   { label: "Caterers", href: "/caterers" },
   { label: "Decorators", href: "/decorators" },
+  { label: "Photographers & Videographers", href: "/photography" },
+  { label: "Rooms & Accommodation", href: "/rooms" },
 ];
 
 interface ContactLine {

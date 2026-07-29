@@ -14,8 +14,15 @@ const UserSchema = new Schema({
   lastLoginAt:  { type: Date },
   lastLoginDevice: { type: String },
   lastLoginMethod: { type: String }, // "google" or "password"
+  twoFactorEnabled: { type: Boolean, default: true },
+  loginAlertsEnabled: { type: Boolean, default: true },
+  sessionTimeoutDays: { type: Number, default: 15 },
   createdAt:    { type: Date, default: Date.now },
-});
+}, { strict: false });
+
+if (process.env.NODE_ENV === "development" && mongoose.models.User) {
+  delete (mongoose.models as any).User;
+}
 
 export const User =
   mongoose.models.User ?? mongoose.model("User", UserSchema);

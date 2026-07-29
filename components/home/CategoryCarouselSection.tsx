@@ -67,45 +67,64 @@ export default function CategoryCarouselSection({ categorySlug, title, subtitle,
   if (!loading && items.length === 0) return null;
 
   return (
-    <section className="py-12 md:py-20 overflow-x-clip">
-      <div className="max-w-7xl mx-auto px-4">
-        {/* Header */}
+    <section className="py-12 md:py-20 overflow-x-clip relative">
+      {/* Abstract Background Orbs */}
+      <div 
+        className="absolute top-1/2 -left-32 -translate-y-1/2 w-96 h-96 rounded-full pointer-events-none opacity-40 dark:opacity-20"
+        style={{
+          background: "radial-gradient(circle, rgba(238,116,41,0.08) 0%, transparent 70%)",
+          filter: "blur(60px)",
+        }}
+      />
+      <div 
+        className="absolute top-1/3 -right-32 w-80 h-80 rounded-full pointer-events-none opacity-30 dark:opacity-15"
+        style={{
+          background: "radial-gradient(circle, rgba(252,203,17,0.1) 0%, transparent 70%)",
+          filter: "blur(50px)",
+        }}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 relative z-10">
+        {/* Header — Title left, Arrow navigation right in one row */}
         <motion.div
-          className="flex flex-col items-center text-center mb-8 md:mb-10 gap-4 md:gap-6"
+          className="flex flex-col md:flex-row md:items-end justify-between mb-8 md:mb-10 gap-4"
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
         >
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--sw-primary)" }}>
+          <div className="text-left">
+            <p className="text-xs sm:text-sm font-semibold uppercase tracking-widest mb-1.5" style={{ color: "var(--sw-primary)" }}>
               {tagLabel}
             </p>
-            <h2 className="section-heading">{title}</h2>
-            <p className="section-subtext mx-auto">{subtitle}</p>
+            <h2 className="section-heading text-left mb-1">{title}</h2>
+            <p className="section-subtext text-left">{subtitle}</p>
           </div>
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-3 self-end md:self-auto">
             <a
               href={`/category/${categorySlug}`}
-              className="hidden md:inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-full transition-all hover:gap-3"
+              className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold px-4 sm:px-5 py-2.5 rounded-full transition-all hover:gap-3 border border-slate-200 dark:border-white/10 shadow-sm hover:shadow"
               style={{ background: "var(--sw-white)", color: "var(--sw-navy)" }}
             >
-              Search more <ArrowRightIcon className="w-4 h-4" />
+              Search more <ArrowRightIcon className="w-4 h-4 text-[var(--sw-primary)]" />
             </a>
             <div className="flex gap-2">
               <button
                 onClick={() => scroll("left")}
-                className="w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-110"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 shadow-sm"
                 style={{ background: "var(--sw-white)", border: "1px solid var(--sw-light-gray)" }}
+                aria-label="Previous items"
               >
                 <ChevronLeftIcon className="w-5 h-5" style={{ color: "var(--sw-navy)" }} />
               </button>
               <button
                 onClick={() => scroll("right")}
-                className="w-11 h-11 rounded-full flex items-center justify-center transition-all hover:scale-110"
-                style={{ background: "var(--sw-ink)" }}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all hover:scale-105 shadow-sm text-white"
+                style={{ background: "var(--sw-primary)" }}
+                aria-label="Next items"
               >
-                <ChevronRightIcon className="w-5 h-5 text-white" />
+                <ChevronRightIcon className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -126,12 +145,12 @@ export default function CategoryCarouselSection({ categorySlug, title, subtitle,
 
         {/* Empty State */}
         {!loading && items.length === 0 && (
-          <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50 rounded-3xl border border-slate-100 border-dashed">
-            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+          <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/10 border-dashed">
+            <div className="w-16 h-16 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center shadow-sm mb-4">
               {icon}
             </div>
-            <h3 className="font-bold text-slate-800 text-lg mb-1">No {title.toLowerCase()} found</h3>
-            <p className="text-slate-500 text-sm max-w-sm">
+            <h3 className="font-bold text-slate-800 dark:text-slate-200 text-lg mb-1">No {title.toLowerCase()} found</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm max-w-sm">
               We are currently updating our listings for {title}. Check back soon!
             </p>
           </div>

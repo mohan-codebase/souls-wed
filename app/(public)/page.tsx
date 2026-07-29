@@ -2,9 +2,8 @@ import HeroSection from "@/components/home/HeroSection";
 import WeddingCategoriesSection from "@/components/home/WeddingCategoriesSection";
 import FeaturedVenues from "@/components/home/FeaturedVenues";
 import CategoryCarouselSection from "@/components/home/CategoryCarouselSection";
-import TestimonialsSection from "@/components/home/TestimonialsSection";
 import FaqSection from "@/components/home/FaqSection";
-import { BedDouble, ClipboardList, UtensilsCrossed, Flower2 } from "lucide-react";
+import { BedDouble, ClipboardList, UtensilsCrossed, Flower2, Camera } from "lucide-react";
 
 export default function Home() {
   return (
@@ -16,16 +15,7 @@ export default function Home() {
         {/* 1. Venues / Banquet halls */}
         <FeaturedVenues />
         
-        {/* 2. Rooms */}
-        <CategoryCarouselSection 
-          categorySlug="rooms"
-          title="Rooms & Accommodations"
-          subtitle="Luxury stays for you and your guests"
-          tagLabel="Rooms"
-          icon={<BedDouble className="w-3.5 h-3.5 text-slate-500"/>}
-        />
-        
-        {/* 3. Wedding planners/Event managers */}
+        {/* 2. Wedding planners/Event managers */}
         <CategoryCarouselSection 
           categorySlug="planners"
           title="Wedding Planners & Event Managers"
@@ -34,7 +24,7 @@ export default function Home() {
           icon={<ClipboardList className="w-3.5 h-3.5 text-slate-500"/>}
         />
         
-        {/* 4. Caterers */}
+        {/* 3. Caterers */}
         <CategoryCarouselSection 
           categorySlug="caterers"
           title="Caterers"
@@ -43,7 +33,7 @@ export default function Home() {
           icon={<UtensilsCrossed className="w-3.5 h-3.5 text-slate-500"/>}
         />
         
-        {/* 5. Decorators */}
+        {/* 4. Decorators */}
         <CategoryCarouselSection 
           categorySlug="decorators"
           title="Decorators"
@@ -52,7 +42,24 @@ export default function Home() {
           icon={<Flower2 className="w-3.5 h-3.5 text-slate-500"/>}
         />
         
-        <TestimonialsSection />
+        {/* 5. Photographers & Videographers */}
+        <CategoryCarouselSection 
+          categorySlug="photography"
+          title="Photographers & Videographers"
+          subtitle="Capture timeless moments"
+          tagLabel="Photography"
+          icon={<Camera className="w-3.5 h-3.5 text-slate-500"/>}
+        />
+        
+        {/* 6. Rooms */}
+        <CategoryCarouselSection 
+          categorySlug="rooms"
+          title="Rooms & Accommodations"
+          subtitle="Luxury stays for you and your guests"
+          tagLabel="Rooms"
+          icon={<BedDouble className="w-3.5 h-3.5 text-slate-500"/>}
+        />
+        
         <FaqSection />
       </main>
     </>

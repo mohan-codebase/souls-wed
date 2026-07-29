@@ -33,7 +33,7 @@
   /* A clean, minimal white background for the entire site */
   --sw-page-bg: #FFFFFF;
   /* Navbar / floating glass surfaces (light orange tint in light, warm charcoal in dark) */
-  --sw-nav-solid: rgba(254, 243, 235, 0.98);
+  --sw-nav-solid: #FEF3EB;
   --sw-nav-default: rgba(254, 243, 235, 0.85);
   --sw-nav-scrolled: rgba(254, 243, 235, 0.95);
   /* Translucent white panels (search bar, filter bar, glass cards) */
@@ -95,8 +95,13 @@
 body {
   font-family: var(--font-body);
   color: var(--sw-black);
-  /* Page background is variable-driven so it flips cleanly in dark mode */
-  background: var(--sw-page-bg);
+  background-color: var(--sw-page-bg);
+  background-image: 
+    radial-gradient(at 5% 0%, rgba(238, 116, 41, 0.05) 0px, transparent 40%),
+    radial-gradient(at 95% 25%, rgba(252, 203, 17, 0.06) 0px, transparent 45%),
+    radial-gradient(at 10% 55%, rgba(238, 116, 41, 0.03) 0px, transparent 50%),
+    radial-gradient(at 90% 85%, rgba(238, 116, 41, 0.05) 0px, transparent 50%);
+  background-attachment: fixed;
   min-height: 100vh;
   overflow-x: hidden;
   transition: background 0.4s ease, color 0.4s ease;
@@ -415,7 +420,7 @@ h6 {
   /* Warm near-black page background to match the brand's warm palette */
   --sw-page-bg: linear-gradient(145deg, #17130F 0%, #191512 45%, #0F0D0B 100%);
   /* Navbar / floating glass surfaces become warm charcoal */
-  --sw-nav-solid: rgba(28, 25, 22, 0.98);
+  --sw-nav-solid: #1C1916;
   --sw-nav-default: rgba(28, 25, 22, 0.95);
   --sw-nav-scrolled: rgba(28, 25, 22, 0.88);
   --sw-glass-panel: rgba(33, 30, 27, 0.85);
