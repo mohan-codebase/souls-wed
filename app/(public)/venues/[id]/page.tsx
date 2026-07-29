@@ -300,8 +300,21 @@ export default function VenueDetailPage() {
               >
                 Pricing
               </h2>
-              {venue.pricePerPlateVeg || venue.pricePerPlateNonVeg || venue.rentalCost ? (
+              {venue.pricePerPlateVeg || venue.pricePerPlateNonVeg || venue.rentalCost || venue.price ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Most venues only have this simple price/unit pair set (the same
+                      one the listing card shows) rather than the per-plate/rental
+                      breakdown below — without this branch they fell through to
+                      "pricing available upon request" despite having a real price. */}
+                  {venue.price && !venue.pricePerPlateVeg && !venue.pricePerPlateNonVeg && !venue.rentalCost && (
+                    <div className="p-6 rounded-lg border border-slate-200 bg-white md:col-span-2">
+                      <p className="font-semibold text-slate-500 text-xs tracking-widest uppercase mb-2">Starting Price</p>
+                      <p className="text-3xl font-bold text-slate-900 mb-1">
+                        {convertPriceString(venue.price, currency)}
+                      </p>
+                      <p className="text-sm text-slate-400 capitalize">{venue.priceUnit || "Per booking"}</p>
+                    </div>
+                  )}
                   {venue.pricePerPlateVeg && (
                     <div className="p-6 rounded-lg border border-slate-200 bg-white">
                       <p className="font-semibold text-slate-500 text-xs tracking-widest uppercase mb-2">Veg Menu</p>

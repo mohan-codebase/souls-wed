@@ -16,7 +16,15 @@ interface VenueMapCardProps {
  * GOOGLE_MAPS_API_KEY is ever added, swap the src for the official Embed API.
  */
 export default function VenueMapCard({ name, city, location, mapLink }: VenueMapCardProps) {
-  const query = [name, location, city].filter(Boolean).join(", ");
+  // `name` is deliberately left out of the geocoding query. For a real,
+  // well-known property it narrows the pin; for a listing whose business
+  // name doesn't exist on Google Maps (true of most demo/seed vendors) the
+  // keyless embed's fuzzy match can land nowhere near the actual city —
+  // confirmed reproducing "Royal Petals Decor, Mumbai, India" landing in
+  // Karnataka, consistently across reloads, not a one-off flake. `location`/
+  // `city` alone are always real places, so the map is at worst less
+  // precise, never wrong.
+  const query = [location, city].filter(Boolean).join(", ");
   const embedSrc = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=14&output=embed`;
   const openHref = mapLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 

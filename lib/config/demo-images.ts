@@ -65,7 +65,10 @@ export const DEMO_IMAGE_POOLS: Record<string, string[]> = {
     "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=1600&q=80",
     "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=1600&q=80",
     "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?w=1600&q=80",
-    "https://images.unsplash.com/photo-1602631985686-1bb0e6a8696e?w=1600&q=80",
+    // photo-1602631985686 was removed — despite the "verified to match its
+    // category" claim above, it's a kids' cowboy-themed birthday party
+    // ("HAPPY BIRTHDAY" banner visible), not wedding decor. Confirmed by
+    // opening the full-size image directly. See scripts/find-listings-with-image.mjs.
   ],
   planners: [
     "https://images.unsplash.com/photo-1460978812857-470ed1c77af0?w=1600&q=80",

@@ -1061,3 +1061,348 @@ reads "Luxury Hotel", and the FAQ section rendered 6 derived questions with no v
 present. Confirmed the accordion opens (dispatched a real click event — a bare `.click()`
 call doesn't reliably trigger React's synthetic handler in this harness) and shows the
 correct 30%-advance answer text.
+
+---
+
+## Session 11 — 28 July 2026
+
+### Homepage hero search: rebuilt, because it was not actually searching
+
+Asked to analyse the hero search bar, then redesign it around what the app can really do.
+The analysis is saved in full at **[`docs/hero-search-analysis.md`](hero-search-analysis.md)**.
+
+**What the audit found.** The bar looked polished and did almost nothing:
+
+- **33 of the 39 categories in its dropdown led to a 404.** `handleSearch` pushed
+  `/{slug}`, but `app/(public)/[category]/page.tsx` recognised only 8 slugs; anything else
+  fell through to the vendor-ID branch, failed the ObjectId check, and hit `notFound()`.
+  Only `venues`, `rooms`, `planners`, `caterers`, `decorators` and `photography` worked.
+- **Three of the four inputs were thrown away.** `guests`, `start` and `end` were written
+  into the URL and read by nothing, anywhere. `city` was read only by the vendor
+  directory — *not* by `/venues`, the most likely destination.
+- **The destination list was 9/13 non-Indian hardcoded cities** (Paris, Tokyo, Sydney…)
+  with no text input, so a couple in Chennai could not search at all, and picking Paris
+  guaranteed zero results.
+- **27 MB of video on the LCP path** — four autoplaying MP4s, no poster, no preload hint,
+  all four pulled within 24 seconds of load.
+- **The whole bar was unreachable by keyboard.** Four `div`s with `onClick`, no roles, no
+  `aria-expanded`, no Escape. Only the Search button took focus, and it submitted empty.
+
+**The redesign is intent-first.** `VENDOR_CATEGORIES[].features` already declares that
+SoulsWed is four marketplaces sharing one directory — bookings, appointments, ecommerce —
+so the bar now reads that and shows only the fields a category can actually be filtered by.
+Picking **Jewellers** leaves *Looking for* + *Where*. **Bridal Wear** adds *When*.
+**Caterers** adds *Guests* as well. Asking a jeweller for a wedding guest count was noise.
+
+Delivered:
+
+- **`lib/config/search.ts`** — one place that owns the search contract: commerce model per
+  category, which fields each shows, the grouped 12-section category picker (all 39 slugs,
+  each exactly once), guest/budget bands, and `buildSearchHref` / `parseSearchParams`.
+  The URL contract is `?city=&guests=&start=&end=&budget=&q=`.
+- **`app/api/search/suggest`** — typeahead fed by the database. Cities come from listings
+  that exist, with live counts ("Dubai, UAE — 2 listings"), so we can never again offer a
+  destination with no inventory. Also matches category names and listing names.
+- **`components/search/SearchSegment.tsx`** — the four ~80-line copy-pasted segments
+  collapsed into one accessible primitive: real `<button>`, `aria-expanded`/`aria-controls`,
+  arrow-key/Home/End navigation over `role="option"` items, Escape to close, focus returned
+  to the trigger.
+- **`components/search/HeroSearch.tsx`** — the adaptive bar, plus popular-category shortcuts.
+- **`components/home/HeroBackdrop.tsx`** — poster-first hero media. Extracted JPEG posters
+  (294 KB for all four, vs 27 MB of video), blurred-up via `next/image` with `priority`;
+  only the current clip is ever mounted; rotation stops when the hero scrolls out of view;
+  **no video at all** on reduced-motion, Save-Data or 2G/3G. Worst case is now one clip
+  instead of four.
+- **Routing fixed at the source** — `[category]/page.tsx` now resolves every slug from the
+  same config the dropdown renders from, so the two cannot drift apart again.
+- **The filters now reach the data** — `lib/search/filters.ts` turns the URL into Mongo
+  fragments (`city`, capacity via `minGuests ≤ n ≤ maxGuests`, budget, free text) plus a
+  date-availability pass that excludes providers with a pending/confirmed booking
+  overlapping the requested range. Applied on `/[category]`, `/vendors`, `/venues` and
+  `/api/venues`. `lib/search/mappers.ts` replaces three near-identical document→card
+  mappings that had already drifted (one returned `_id: v._id` for venues where the others
+  returned `venueId`, so only one of them lined up with `Booking.providerId`).
+- **Hero copy for the 30-odd uncurated categories** is now derived from the category config
+  and its commerce model, instead of every one of them landing on a generic
+  "Wedding Vendors" heading. `/makeup` now reads "Wedding **Makeup Artists** — Flawless
+  bridal beauty".
+
+**Two real bugs found while verifying.** Framer Motion's `AnimatePresence` was not
+completing the exit on the dropdowns: the panel stayed mounted at `opacity: 0` forever,
+leaving invisible focusable options in the tab order, and the adaptive segments never
+disappeared when the category changed. Both now render entry-only and unmount
+synchronously — a 180 ms fade is not worth stranding keyboard focus. The dropdown
+background also moved from `--sw-nav-default` (0.85 alpha) to `--sw-nav-solid` (0.98);
+a translucent popover over a photographic hero was unreadable, and nested
+`backdrop-filter`s do not reliably blur it.
+
+### Verified
+
+- **All 39 category routes return 200** (was 6). `/not-a-real-category` still 404s, and
+  the vendor-ID detail route still works.
+- Filters change results against live data: `/caterers` 5 → `?city=Paris` 1;
+  `/api/venues?guests=100` 6 → `?guests=5000` 0; `?budget=30000` 3 → `?budget=200000` 6.
+- End-to-end from the hero: Caterers + Dubai + 250–500 → `/caterers?city=Dubai%2C+UAE&guests=500`,
+  heading "Wedding Caterers", both filters shown as removable chips.
+- Adaptive fields confirmed per commerce model (Jewellers 2 fields, Bridal Wear 3,
+  Makeup Artists 3, Caterers 4).
+- Keyboard: arrow keys move between options, End jumps to the last, wraps to the top;
+  selecting closes the panel and returns focus to the trigger; every segment now has an
+  accessible name ("Guests: 250 – 500").
+- Dark mode flips correctly (panel `rgb(28,25,22)`); mobile 375px stacks with no horizontal
+  overflow and popovers stay inside the viewport.
+- `tsc --noEmit` clean, `next build` compiles, no new lint errors in the touched files.
+
+### Outstanding
+
+- **The guest and budget filters are untested against real inventory** — no seeded
+  ServiceListing has `minGuests`/`maxGuests` set, and every caterer is under ₹50,000, so
+  those filters currently pass everything through for services. The logic is proven against
+  venues (which do have 50–500 bounds). The fix is vendor-side: make capacity and price
+  required in the listing form.
+- **Budget is not in the hero bar** by design — it is in the URL contract and the directory
+  chips, but no results-page control sets it yet.
+- **The listing typeahead only matches `name` and `location`.** Searching "photo" surfaces
+  the category, not individual photographers.
+- **The mobile bar is tall** (four stacked rows plus the button). The standard pattern is a
+  single collapsed tap-target that expands into the full bar; not done here.
+- **`BookingCalendar` still takes a `providerId` prop it never reads** — the hero passes an
+  empty string. Harmless, but it should either be used for availability or removed.
+
+### Follow-up (same day) — made the search answer before you click, and found a page rendering nothing
+
+Client asked for the search to be "dynamic, very user friendly" and for the details to be
+checked properly. Three things came out of that.
+
+**1. The bar now tells you what you'll get, before you click.**
+
+The Search button reads **"Search 6 venues"**, **"Search 1 result"**, or falls back to plain
+"Search" while the number is in flight. The count is not an estimate: `/api/search/count`
+calls the *same* `findListings` the results page calls, so the promise on the button is the
+number of cards the couple lands on. To make that guarantee real, the three near-duplicate
+data loaders in `/[category]`, `/vendors` and the count endpoint were collapsed into one
+**`lib/search/query.ts`** — a count that can disagree with the page it promises is worse
+than no count.
+
+Verified across nine route/filter combinations that button count == rendered count
+(`/caterers` 5, `?city=Paris` 1, `?city=Dubai` 0, `/planners?city=Kochi` 1, `/rooms` 5,
+`/decorators?budget=50000` 4, `/photography` 0, `/vendors` 27, `?city=New York` 5), and
+end-to-end from the hero: the button said "Search 2 venues", the page said
+"Showing 2 venues in Hong Kong".
+
+**2. Dead ends are now announced before the click, with a way out.**
+
+- **City suggestions are scoped to the chosen category.** Pick Caterers and the Where list
+  shows only Jaipur / New York / Paris / Rome / Sydney — the five cities that actually have
+  caterers. Previously it offered Dubai (2 listings) to a caterer search when those two
+  listings were room providers. Same defect as the old hardcoded Paris/Tokyo list, one
+  level down.
+- When a selection returns nothing, a line appears under the bar. It distinguishes the two
+  causes: *"Nothing matches yet. Search all cities · Clear dates & guests"* when filters are
+  too tight, versus *"No jewellers listed yet. Browse everything"* when the category is
+  simply empty. Both offer a one-click recovery, and the button stops promising results.
+- The city panel no longer goes blank for a category with no inventory.
+
+**3. Found while verifying: `/venues?city=…` rendered nothing at all.**
+
+This was a regression from the earlier session. Wiring the venues page to the URL contract
+turned it into a client component reading `useSearchParams`; on a statically prerendered
+route that hook suspends, and the Suspense fallback never resolved — the page showed a
+spinner and no venues, silently, with no console error. Fixed by making
+`app/(public)/venues/page.tsx` a **server shell** that reads `searchParams` and passes the
+parsed query as a prop to a new `components/venues/VenuesDirectory.tsx`. The route is now
+dynamic (`ƒ`) rather than static (`○`), which is also correct for a filtered listing page.
+
+Smaller details caught in the same pass:
+
+- Pressing Enter in the city box used the raw text; typing "koc" set the city to "koc"
+  rather than "Kochi, India". It now takes the top suggestion, which is already filtered by
+  what was typed. Arrow-Down from the input jumps into the suggestion list.
+- The clear-all "×" was `hidden md:flex` — mobile users could not clear the bar. Now visible
+  at every width.
+- "Showing 2venues" / "Showing 1 caterers" — a missing space and a pluralisation that
+  assumed singular category names. Both fixed; a count of one reads "1 result".
+- `Search 6 venues / banquet halls` overflowed the button; compound category names are now
+  shortened to their leading term for inline copy (`categoryNoun`).
+- `reset()` left stale suggestions in state, and the submit button could stay disabled
+  forever if `router.push` targeted the URL already showing.
+
+Verified after the change: all 39 category routes still 200, unknown slug still 404s,
+`/accommodation` alias still resolves, `tsc --noEmit` clean, `next build` compiles, no new
+lint errors, mobile 375px has no horizontal overflow and the clear button is reachable.
+
+## Session 12 — 29 July 2026
+
+### Closed out three items from the July 28 outstanding list
+
+**1. The "Guests" and "Price Range" chips on the results pages were decorative.**
+
+`VenueFilterBar` — the sticky filter bar shared by `/venues`, `/vendors`, and every
+`/[category]` page — had five filter chips. Only "Guests" and "Price Range" map to anything
+the backend understands, and both wrote to a local `activeFilters` object nothing ever read.
+Picking "100–300 guests" or "₹50k–₹2L" looked like it worked (the chip highlighted, showed a
+checkmark) and silently filtered nothing — meanwhile `/api/venues` and `findListings` already
+had full `guests`/`budget` support wired from the hero search rebuild, and
+`GUEST_BANDS`/`BUDGET_BANDS` already existed in `lib/config/search.ts` unused by this bar.
+
+Made both chips controlled: `VenueFilterBar` now takes optional `guests`/`budget` values and
+`onGuestsChange`/`onBudgetChange` callbacks. When wired, the options come from the real bands
+instead of the old hand-written ones, selecting an option pushes `?guests=`/`?budget=` onto
+the URL, and the chip label/checkmark reflect the actual query state. `VenuesDirectory.tsx`
+and `PublicVendorDirectory.tsx` — the two components that render this bar with a live
+`SearchQuery` — now pass those callbacks. The three still-decorative chips ("Venue Type",
+"Space", "Features") are untouched; there's no schema field behind them to filter on, so
+wiring them is a separate, bigger piece of work.
+
+Verified end to end on `/venues`: selecting "50 – 100" pushes `?guests=100`, fires
+`GET /api/venues?guests=100`, and the "Filters" button badges "1". "Clear all" drops both
+`guests` and `city`. Same for Price Range → `?budget=100000`. Confirmed the read path too —
+loading `/caterers?guests=250&budget=300000` directly renders both chips pre-selected
+("100 – 250", "Under ₹3 lakh") and "Showing 5 caterers".
+
+**2. The listing typeahead couldn't find a photographer by searching "photo".**
+
+`app/api/search/suggest/route.ts`'s `matchingListings()` only regex-matched a service's
+`name` and `location`. With no category chosen, typing "photo" matched the Photography
+*category* suggestion (from `matchingCategories`, which does check tagline text) but not
+individual photographer listings, whose business names rarely contain the word. Added the
+listing's own `category` field to the match when no category is already selected — once a
+category is chosen it's redundant, since every result is already filtered to it.
+
+**3. `BookingCalendar` had a required `providerId` prop it never read.**
+
+Flagged in the July 28 outstanding list as dead weight — the doc comment claimed it was "used
+for fetching availability," but availability is fetched by the parent (`BookingForm`) and
+passed down as `bookedDates`; the component's own body never touched the prop. One call site
+(`HeroSearch`'s date picker) was passing `providerId=""` to satisfy the type. Removed the prop
+from the interface and both call sites (`BookingForm.tsx`, `HeroSearch.tsx`).
+
+**4. Found while re-testing: every navigation silently ate the next ~2 seconds of clicks.**
+
+`components/shared/Preloader.tsx` — the branded splash screen — is mounted once in the root
+layout, which persists across client-side navigations. Its `useEffect` depended on
+`usePathname()`, so it re-ran on *every* route change, not just the first cold load: submitting
+the hero search, clicking a filter chip, picking a city — anything that calls `router.push`
+re-showed a `fixed inset-0 z-[9999]` overlay with `pointer-events: auto` for 1.5s plus a further
+0.8s fade-out. For roughly 2.3 seconds after every one of those actions, the entire app was
+covered by an invisible-once-faded click sink. Reproduced directly: `document.elementFromPoint()`
+on a filter chip returned the preloader `<div>`, not the button, immediately after a
+`router.push`. This is likely the actual cause behind any "the search feels unresponsive /
+double-click" reports, not a browser-automation artifact — a real user clicking a filter chip
+right after a page transition would have the same click silently swallowed.
+
+Fixed by making the splash a true one-time-per-load screen (module-level flag instead of a
+`pathname`-keyed effect) and setting `pointer-events-none` on the overlay unconditionally, so
+even during its one legitimate 1.5s+0.8s display it never blocks the content compiling
+underneath it.
+
+### Verified
+
+`tsc --noEmit` clean throughout. Browser-verified the filter bar wiring on both `/venues`
+(VenuesDirectory) and `/caterers` (PublicVendorDirectory) as described above, including that
+filter clicks now register on the very first click after a navigation instead of requiring a
+second click to "wake up" the page.
+
+### Outstanding (from July 28, still open)
+
+- Guest/budget filters remain unverifiable against real inventory — no seeded listing has
+  `minGuests`/`maxGuests` or is priced above ₹50,000, so those filters still pass everything
+  through. Needs vendor-form validation making capacity/price required, not a search-side fix.
+- The mobile hero search bar is still a tall stack of four segments rather than a single
+  collapsed tap-target.
+- `app/(public)/vendors/[category]/page.tsx` appears orphaned — nothing links to
+  `/vendors/:category`, it's superseded by `/[category]`, and it fetches independently of the
+  `lib/search` pipeline (no guests/budget/date support). Candidate for removal, same shape as
+  the invoices cleanup on this branch.
+
+### Follow-up (same day) — full user-flow QA pass, then fixed what it found
+
+Ran a background agent through the app end to end as a couple would use it: hero search across
+commerce models (booking/appointment/shop categories), filtering on `/venues`, `/caterers`,
+`/decorators`, `/jewellers`, `/photography`, listing detail pages, empty states, and invalid
+routes. Full verdict: no crashes, no console errors anywhere, and the Price Range filter fix
+from earlier today does narrow real results (venues 6→5 on "Under ₹1 lakh"), confirming the
+wiring is not just cosmetic. Two things stood out:
+
+**Only 5 of 39 categories have any listings at all** (venues, planners, caterers, decorators,
+rooms — 27 vendors total). Every other category, including Photographers & Videographers
+despite being featured in hero copy and the "Popular" shortcuts, is a hard dead end. This is a
+seed-data/content gap, not a code fix — flagging here rather than acting on it.
+
+**Fixed: vendor detail pages showed a duplicated country**, e.g. "Jaipur, India, India" or
+"Bali, Indonesia, India". `VendorHero.tsx` was unconditionally appending `, India` after
+`vendor.city`. Two things made this worse than a single hardcoded string: `city` on
+`ServiceListing`-backed vendors (caterers, decorators, etc.) is a free-text field a vendor typed
+into a form, so it's often already a full "City, Country" string; and the `country` field itself
+is frequently absent on this seed data even though the schema declares a default, because the
+seed script bypasses Mongoose's document-creation defaults. So neither "trust `city` is bare" nor
+"trust `country` is set" holds. Fixed by keying off the actual shape of the data instead: if
+`city` already contains a comma (i.e. is already "City, Country"), render it as-is; otherwise
+append `vendor.country || "India"`. Verified against both cases — `caterer-royal-1` now renders
+"Jaipur, India" (was doubled) and `decorator-enchanted-1` now renders "Bali, Indonesia" (was
+"Bali, Indonesia, India" — the old code was also mislabeling non-Indian listings as India).
+Also added the missing `country` field to the `PublicVendor` type and to the `ServiceListing`→
+`PublicVendor` mapping in `app/api/vendors/route.ts`, which omitted it entirely.
+
+Verified: `tsc --noEmit` clean, both reproduction cases fixed in-browser, no new console errors.
+
+### Follow-up (same day) — worked through the QA report's polish list
+
+Four more items from the QA report, in increasing order of how deep they went:
+
+**1. "You've seen all 1 venues" / "1 vendors" pluralization.** Fixed in both `VenuesDirectory.tsx`
+and `PublicVendorDirectory.tsx`. The vendor one now matches the existing singular handling used
+a few lines up in the same file ("result" for a count of one, since category names like
+"Caterers" are already plural).
+
+**2. Destination city-circles didn't sync to the URL.** Unlike Guests/Price Range, picking a
+city from the "Destinations" row only updated local component state — not bookmarkable, lost on
+refresh. Wired `onCityChange` in both directory components to also push `?city=` when exactly
+one city is selected (the URL contract only carries a single value; a multi-select stays
+local-only, same as before, since redesigning the contract for arrays was out of scope). Verified
+on both `/venues` and `/caterers`, including that a hard reload of the resulting URL correctly
+restores the selection.
+
+**3. Venue detail page said "pricing available upon request" while its own listing card showed
+a concrete price.** Root cause: `app/(public)/venues/[id]/page.tsx`'s Pricing section only
+checked `pricePerPlateVeg` / `pricePerPlateNonVeg` / `rentalCost` — it never looked at the plain
+`price`/`priceUnit` fields the listing card itself renders. Every venue in the seed data that
+only has that simple pair (which is most of them — JW Marriott Hong Kong: `price: "27000"`,
+all three per-plate/rental fields empty) fell through to the fallback message despite having a
+real price. Added a "Starting Price" branch for that case; verified the existing per-plate
+branch still wins when those fields are actually set (Grand Automated Palace, which has both).
+
+**4. A decorator's gallery had a "HAPPY BIRTHDAY" banner photo.** Turned out to be worse than a
+one-off: the photo (Unsplash `1602631985686`) was sitting in the *curated* `decorators` pool in
+`lib/config/demo-images.ts` itself — the file's header claims every URL was "visually checked to
+match its category," which wasn't true of this one (opened the full-size original: it's a kids'
+cowboy-themed birthday party). It had already been seeded into 3 listings' galleries before
+this fix, not just the one flagged. Removed it from the pool and swapped it out in all three
+galleries for a different, already-verified pool photo per listing (scripts checked into
+`scripts/` — `find-listings-with-image.mjs` for the audit, `fix-birthday-photo-in-galleries.mjs`
+for the swap — both dry-run by default, matching the existing `seed-demo-galleries.mjs`
+convention). Also found and fixed `decorator-royal-1`'s *hero* image separately: it was a photo
+scraped from an unrelated real business's directory listing (jdmagicbox.com — a Lucknow florist,
+not a licensed stock photo), fixed via `fix-royal-petals-hero-image.mjs`. Ran a broader
+`check-scraped-images.mjs` audit across both collections for the same directory-scrape pattern —
+no other listings affected.
+
+**Found while checking the map for that same decorator**: `VenueMapCard`'s embedded map
+geocodes `[name, location, city]` together. For a real, well-known property that's a precise
+pin; for a fictional demo business name (true of nearly every seed listing) Google's keyless
+embed can fuzzy-match it to a completely unrelated place — reproduced "Royal Petals Decor,
+Mumbai, India" landing in Karnataka, consistently across repeated hard reloads, not a one-off
+flake. Dropped `name` from the query, keeping `location`/`city` — always a real place, at worst
+less precise than a business-level pin. Verified: the fictional listing now geocodes to Mumbai
+(JJ Hospital, Girgaon, Mazgaon), and a real venue (JW Marriott Hong Kong) still resolves
+precisely (`Admiralty, Hong Kong`) even without its name in the query.
+
+Verified throughout: `tsc --noEmit` clean, no console errors, each fix checked in-browser
+individually.
+
+### Outstanding
+
+- The 34-category content gap.
+- Everything already listed as outstanding from the July 28 session (guest/budget filters
+  unverifiable against real inventory, mobile hero bar not collapsed, orphaned
+  `/vendors/[category]` route).

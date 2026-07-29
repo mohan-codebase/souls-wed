@@ -54,6 +54,15 @@ export default function VendorHero({ vendor, photoCount, onReviewSubmitted }: Ve
   const rating = vendor.rating || 0;
   const reviewCount = vendor.reviewCount || 0;
 
+  // `city` on ServiceListing-backed vendors is free text a vendor typed into
+  // a form field, so it's often already a full "City, Country" string (e.g.
+  // "Jaipur, India", "Bali, Indonesia") — appending `country` unconditionally
+  // produced "Jaipur, India, India" or, worse, "Bali, Indonesia, India" when
+  // `country` was unset and fell back to the "India" default.
+  const cityLabel = vendor.city?.includes(",")
+    ? vendor.city
+    : [vendor.city, vendor.country || "India"].filter(Boolean).join(", ");
+
   return (
     <div className="w-full flex flex-col relative">
       {/* Back Link */}
@@ -87,7 +96,7 @@ export default function VendorHero({ vendor, photoCount, onReviewSubmitted }: Ve
 
             <div className="flex items-center gap-1.5 text-slate-600 text-sm font-medium">
               <MapPinIcon className="w-4 h-4 text-slate-400" />
-              {vendor.city}, India
+              {cityLabel}
               {vendor.mapLink && (
                 <a href={vendor.mapLink} target="_blank" rel="noopener noreferrer" className="text-primary-600 font-semibold ml-2 hover:underline text-xs">
                   (View on Map)

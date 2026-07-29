@@ -34,6 +34,7 @@ export async function GET(req: Request) {
             businessName: service.name,
             category: service.category,
             city: service.city,
+            country: service.country,
             priceFrom: service.priceFrom,
             rating: service.rating || 0,
             reviewCount: service.reviewCount || 0,
