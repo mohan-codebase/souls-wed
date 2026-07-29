@@ -1,0 +1,117 @@
+name: CI
+
+# Runs on every push and pull request. Added after the July 2026 audit, where
+# every bug was found by hand — the point of this file is that the regression
+# suite runs whether or not anyone remembers to run it.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A newer push to the same branch cancels the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Blocking checks ────────────────────────────────────────────────────────
+  # These are green today, so a failure here is a real regression rather than
+  # pre-existing noise. Keep them that way.
+  verify:
+    name: Test, typecheck & secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22 is required: the unit tests rely on --experimental-strip-types
+          # to run TypeScript directly, which is how this project avoids taking on
+          # a test-framework dependency.
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Guard against another .env leak ──
+      # .env was committed 12 times before it was untracked, exposing the Atlas
+      # password, SESSION_SECRET, Stripe keys, SMTP and Cloudinary credentials.
+      # .gitignore alone didn't prevent that, because it doesn't apply to files
+      # git is already tracking. This check does.
+      - name: Fail if an env file is tracked
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env(\..*)?$' | grep -v '\.env\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Environment files are tracked by git:"
+            echo "$tracked"
+            echo ""
+            echo "Untrack them with:  git rm --cached <file>"
+            echo "Then rotate every credential they contained — they are in the history."
+            exit 1
+          fi
+          echo "No env files tracked."
+
+      # ── Catch obvious secrets pasted into source ──
+      # Deliberately narrow: only unambiguous live-key prefixes, so it doesn't
+      # cry wolf. It is a backstop, not a substitute for a real scanner.
+      - name: Scan for hardcoded credentials
+        run: |
+          pattern='(sk_live_[0-9a-zA-Z]{20,}|rk_live_[0-9a-zA-Z]{20,}|GOCSPX-[0-9A-Za-z_-]{20,}|mongodb\+srv://[^:]+:[^@]+@)'
+          if git grep -nEI "$pattern" -- \
+               ':!*.example' ':!.github/workflows/*' ':!AUDIT-REPORT.md'; then
+            echo "::error::Possible live credential committed to source. Rotate it and remove it."
+            exit 1
+          fi
+          echo "No obvious credentials found."
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # The build only needs these to exist, not to be valid — Next evaluates
+          # module-level config during the build. Real values live in the
+          # deployment environment.
+          MONGODB_URI: mongodb://localhost:27017/ci-placeholder
+          SESSION_SECRET: ci-placeholder-session-secret-at-least-32-chars
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
+  # ── Non-blocking ───────────────────────────────────────────────────────────
+  # eslint currently reports ~283 problems (153 errors), essentially all
+  # pre-existing: `any` types and prefer-const across the original codebase.
+  # Making this blocking would paint CI red on day one and train everyone to
+  # ignore it, which is worse than not running it.
+  #
+  # It reports so the count is visible and can be driven down. Once it reaches
+  # zero, delete `continue-on-error` and move this into `verify`.
+  lint:
+    name: Lint (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: ESLint
+        run: npx eslint . || true
+      - name: Problem count
+        run: |
+          count=$(npx eslint . -f json 2>/dev/null \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);console.log(r.reduce((a,f)=>a+f.errorCount+f.warningCount,0))})" \
+            || echo "unknown")
+          echo "### ESLint problems: $count" >> "$GITHUB_STEP_SUMMARY"
+          echo "Baseline at the time CI was added: 283 (153 errors, 130 warnings)." >> "$GITHUB_STEP_SUMMARY"
+          echo "This job is advisory. Drive the count down, then make it blocking." >> "$GITHUB_STEP_SUMMARY"

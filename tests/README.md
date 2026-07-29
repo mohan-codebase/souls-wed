@@ -80,5 +80,19 @@ deleted afterwards, so revenue returns to where it started.
   Testing the rest needs Stripe test keys and the CLI to forward webhooks.
 - **Email delivery is unverified.** The code dispatches without blocking, but
   nothing asserts a message reaches an inbox.
-- **No CI.** These run on demand. Wiring `npm test` into a GitHub Action would
-  make the unit tests a real safety net rather than something to remember.
+## CI
+
+`.github/workflows/ci.yml` runs on every push and pull request.
+
+**Blocking** (all green today, so a failure is a real regression): the env-file
+guard, a credential scan, `tsc --noEmit`, `npm test`, and `npm run build`.
+
+**Advisory:** ESLint. It reports ~283 problems (153 errors), essentially all
+pre-existing `any` and `prefer-const` in the original codebase. Making it
+blocking would paint CI red on day one and train everyone to ignore it. It runs
+with `continue-on-error` and prints the count to the job summary — drive that to
+zero, then delete `continue-on-error` and move the job into `verify`.
+
+The env-file guard exists because `.gitignore` did not prevent `.env` being
+committed 12 times: gitignore doesn't apply to files git already tracks. This
+check does, and fails the build if any env file is tracked again.

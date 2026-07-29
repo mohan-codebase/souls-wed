@@ -365,8 +365,11 @@ down, so the expected status codes and messages are real rather than assumed.
   Stripe test keys and the CLI to forward webhooks.
 - **Email delivery is unverified** — the code dispatches correctly and doesn't
   block, but nothing confirms a message arrives.
-- **No CI.** Wiring `npm test` into a GitHub Action would turn the unit tests
-  from something to remember into an actual safety net.
+- ~~**No CI.**~~ Added — `.github/workflows/ci.yml`. Blocking: env-file guard,
+  credential scan, typecheck, unit tests, build. Advisory: ESLint, because its
+  283 pre-existing problems would make CI red on day one and therefore ignored.
+  The env-file guard is the important one: `.gitignore` did not stop `.env`
+  being committed 12 times, because it doesn't apply to already-tracked files.
 
 ---
 
