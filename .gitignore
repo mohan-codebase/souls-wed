@@ -5,4 +5,4 @@ tsconfig.tsbuildinfo
 app/uploads
 .env
 .env.local
-.DS_Store # untracked, currently showing in git status
+.DS_Store
