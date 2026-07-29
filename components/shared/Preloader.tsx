@@ -3,22 +3,27 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "@/components/shared/CustomImage";
-import { usePathname } from "next/navigation";
+
+// The root layout persists across client-side navigations, so this must only
+// run once per page load — not once per component instance. Re-triggering on
+// every `pathname` change (the previous behavior) put a `pointer-events: auto`,
+// z-[9999] overlay on top of the whole app for ~1.5-2.3s after every search
+// submit, filter click, or city selection, silently swallowing the click.
+let hasShownPreloader = false;
 
 export default function Preloader() {
-  const [isLoading, setIsLoading] = useState(true);
-  const pathname = usePathname();
+  const [isLoading, setIsLoading] = useState(!hasShownPreloader);
 
   useEffect(() => {
-    // Show preloader on every page change
-    setIsLoading(true);
+    if (hasShownPreloader) return;
+    hasShownPreloader = true;
 
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 1500); // 1.5 seconds display
 
     return () => clearTimeout(timer);
-  }, [pathname]);
+  }, []);
 
   return (
     <AnimatePresence>
@@ -26,7 +31,7 @@ export default function Preloader() {
         <motion.div
           initial={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden"
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden pointer-events-none"
           style={{ background: "var(--sw-preloader-bg)" }} // Theme-aware premium background
         >
           {/* Animated background noise/texture */}
