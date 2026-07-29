@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   try {
     // Rate limited: this endpoint triggers outbound email, so without a cap it
     // is a free spam relay (and a way to mail-bomb an arbitrary address).
-    const rl = hit(`signup:${clientIp(req)}`, LIMITS.SIGNUP.limit, LIMITS.SIGNUP.windowMs);
+    const rl = await hit(`signup:${clientIp(req)}`, LIMITS.SIGNUP.limit, LIMITS.SIGNUP.windowMs);
     if (!rl.ok) {
       return tooManyRequests("Too many sign-up attempts from this network. Please try again later.", rl.retryAfter);
     }

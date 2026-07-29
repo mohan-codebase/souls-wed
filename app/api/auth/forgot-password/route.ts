@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limited per IP and per target address: without a cap this is a way
     // to mail-bomb any address on the platform, using our own SMTP to do it.
-    const ipLimit = hit(
+    const ipLimit = await hit(
       `reset:ip:${clientIp(req)}`,
       LIMITS.PASSWORD_RESET.limit,
       LIMITS.PASSWORD_RESET.windowMs
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Email is required" }, { status: 400 });
     }
 
-    const targetLimit = hit(
+    const targetLimit = await hit(
       `reset:addr:${String(email).toLowerCase().trim()}`,
       LIMITS.PASSWORD_RESET.limit,
       LIMITS.PASSWORD_RESET.windowMs

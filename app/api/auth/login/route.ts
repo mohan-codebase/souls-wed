@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     const accountKey = `login:acct:${role}:${String(email).toLowerCase().trim()}`;
     const ipKey = `login:ip:${ip}`;
 
-    const perAccount = hit(accountKey, LIMITS.LOGIN_PER_ACCOUNT.limit, LIMITS.LOGIN_PER_ACCOUNT.windowMs);
+    const perAccount = await hit(accountKey, LIMITS.LOGIN_PER_ACCOUNT.limit, LIMITS.LOGIN_PER_ACCOUNT.windowMs);
     if (!perAccount.ok) {
       return tooManyRequests(
         "Too many sign-in attempts for this account. Please try again in a few minutes.",
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const perIp = hit(ipKey, LIMITS.LOGIN_PER_IP.limit, LIMITS.LOGIN_PER_IP.windowMs);
+    const perIp = await hit(ipKey, LIMITS.LOGIN_PER_IP.limit, LIMITS.LOGIN_PER_IP.windowMs);
     if (!perIp.ok) {
       return tooManyRequests(
         "Too many sign-in attempts from this network. Please try again later.",
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     // Password was correct — clear the per-account counter so earlier typos
     // don't count against them for the rest of the window. The per-IP bucket
     // deliberately stays, since stuffing attacks do land occasional hits.
-    reset(accountKey);
+    await reset(accountKey);
 
     // ─── Step 3.5: Check if email is verified ───
     // Exception: Allow admin@soulswed.com to bypass verification for easier testing/admin access

@@ -2,130 +2,104 @@
  * RATE LIMITING
  *
  * The app previously had none. `POST /api/auth/login` accepted unlimited
- * attempts, so password brute-force and credential stuffing were wide open;
- * so were `/api/inquiries` and `/api/subscribe` (free outbound email via the
- * platform's own SMTP) and `/api/auth/forgot-password` (mail-bombing any
- * address). See AUDIT-REPORT.md #9.
+ * attempts, so password brute-force and credential stuffing were open; so were
+ * the endpoints that send email, which doubled as a free spam relay and a way
+ * to mail-bomb any address. See AUDIT-REPORT.md #9.
  *
- * SCOPE AND LIMITATIONS — PLEASE READ
+ * ── Why this talks to the database ──────────────────────────────────────────
  *
- * This is a fixed-window counter held in the Node process's memory. That is
- * genuinely useful for a single long-running server (which is how this app is
- * deployed today) and costs nothing to run. It is NOT sufficient if you:
+ * The first implementation held counters in process memory. That is fine on one
+ * long-running Node server, and useless on Vercel: serverless invocations don't
+ * share memory, so counters reset constantly and the limit never actually
+ * bites. Since this app deploys to Vercel, the state has to be shared, and it
+ * lives in Mongo (see lib/models/RateLimit.ts for why not Redis).
  *
- *   - run more than one instance / replica  → each keeps its own counters, so
- *     the effective limit multiplies by the number of instances
- *   - deploy to serverless (Vercel functions, Lambda) → memory is per-invocation
- *     and cold starts reset it, making the limiter close to useless
+ * Consequence: `hit()` and `reset()` are **async**. Every call site must await
+ * them, or the limit silently does nothing.
  *
- * If either becomes true, swap `hit()` for a Redis/Upstash-backed
- * implementation. The call sites don't need to change — only this file does.
+ * ── Accuracy ────────────────────────────────────────────────────────────────
+ *
+ * This is a fixed-window counter, not a sliding window, so a burst straddling a
+ * window boundary can briefly exceed the nominal rate. Two simultaneous
+ * requests that both find an expired window can also both open a new one,
+ * costing one extra attempt. Both are acceptable here: the job is to make
+ * brute-force impractical, not to meter billing.
+ *
+ * If the limiter ever fails (Mongo unreachable), it **fails open** — the
+ * request is allowed. That is deliberate: a database blip should not lock
+ * everyone out of signing in. It does mean the limiter is not a defence
+ * against an attacker who can also take Mongo down, at which point you have a
+ * larger problem.
  */
 
-interface Bucket {
-  count: number;
-  resetAt: number;
-}
+import { connectDB } from "@/lib/mongodb";
+import { RateLimit } from "@/lib/models/RateLimit";
+import type { RateLimitResult } from "@/lib/rate-limit-config";
 
-const buckets = new Map<string, Bucket>();
-
-// Bound the map so a flood of unique keys can't exhaust memory. When we hit the
-// ceiling we drop the entries closest to expiry, which are the least useful.
-const MAX_TRACKED_KEYS = 20_000;
-
-function evictIfNeeded() {
-  if (buckets.size <= MAX_TRACKED_KEYS) return;
-  const sorted = [...buckets.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
-  for (const [key] of sorted.slice(0, Math.ceil(MAX_TRACKED_KEYS * 0.1))) {
-    buckets.delete(key);
-  }
-}
-
-export interface RateLimitResult {
-  ok: boolean;
-  /** Attempts left in the current window. */
-  remaining: number;
-  /** Seconds until the window resets — suitable for a Retry-After header. */
-  retryAfter: number;
-}
+// The pure half lives in its own import-free module so it can be unit-tested;
+// re-exported here so call sites only ever import from "@/lib/rate-limit".
+export { clientIp, LIMITS, tooManyRequests } from "@/lib/rate-limit-config";
+export type { RateLimitResult } from "@/lib/rate-limit-config";
 
 /**
  * Record one attempt against `key` and report whether it's allowed.
  *
- * @param key    identity being limited, e.g. `login:ip:1.2.3.4`
- * @param limit  attempts permitted per window
+ * @param key       identity being limited, e.g. `login:ip:1.2.3.4`
+ * @param limit     attempts permitted per window
  * @param windowMs  window length in milliseconds
  */
-export function hit(key: string, limit: number, windowMs: number): RateLimitResult {
-  const now = Date.now();
-  const bucket = buckets.get(key);
+export async function hit(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<RateLimitResult> {
+  const windowSeconds = Math.ceil(windowMs / 1000);
 
-  if (!bucket || bucket.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    evictIfNeeded();
-    return { ok: true, remaining: limit - 1, retryAfter: Math.ceil(windowMs / 1000) };
+  try {
+    await connectDB();
+    const now = new Date();
+
+    // Increment inside a window that is still live. The `resetAt > now` guard
+    // means an expired row simply doesn't match, and we fall through to
+    // starting a fresh window below.
+    const existing = await RateLimit.findOneAndUpdate(
+      { _id: key, resetAt: { $gt: now } },
+      { $inc: { count: 1 } },
+      { new: true }
+    ).lean();
+
+    if (existing) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((new Date(existing.resetAt).getTime() - now.getTime()) / 1000)
+      );
+      if (existing.count > limit) {
+        return { ok: false, remaining: 0, retryAfter };
+      }
+      return { ok: true, remaining: Math.max(0, limit - existing.count), retryAfter };
+    }
+
+    // No live window — open a new one. Overwrites any expired row for this key.
+    await RateLimit.updateOne(
+      { _id: key },
+      { $set: { count: 1, resetAt: new Date(now.getTime() + windowMs) } },
+      { upsert: true }
+    );
+
+    return { ok: true, remaining: limit - 1, retryAfter: windowSeconds };
+  } catch (err) {
+    // Fail open — see the note at the top of this file.
+    console.error("[rate-limit] check failed, allowing request:", err);
+    return { ok: true, remaining: limit, retryAfter: windowSeconds };
   }
+}
 
-  bucket.count += 1;
-  const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
-
-  if (bucket.count > limit) {
-    return { ok: false, remaining: 0, retryAfter };
+/** Clear a key's counter — call after a successful login so typos don't linger. */
+export async function reset(key: string): Promise<void> {
+  try {
+    await connectDB();
+    await RateLimit.deleteOne({ _id: key });
+  } catch (err) {
+    console.error("[rate-limit] reset failed:", err);
   }
-
-  return { ok: true, remaining: limit - bucket.count, retryAfter };
-}
-
-/** Clear a key's counter — call after a successful login so one bad day doesn't linger. */
-export function reset(key: string): void {
-  buckets.delete(key);
-}
-
-/**
- * Best-effort client IP. Behind a proxy or CDN the socket address is the proxy,
- * so we prefer the forwarding headers.
- *
- * NOTE: `x-forwarded-for` is trivially spoofable unless a trusted proxy sets it.
- * Make sure your host (Vercel, Cloudflare, nginx) overwrites rather than appends
- * it — otherwise an attacker can rotate the header to dodge IP limits. The
- * account-scoped limits below don't depend on the IP, and are the real backstop.
- */
-export function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return (
-    req.headers.get("x-real-ip") ||
-    req.headers.get("cf-connecting-ip") ||
-    "unknown"
-  );
-}
-
-/**
- * Shared limits, named so the intent is obvious at the call site.
- * Tuned to be invisible to a real person and painful for a script.
- */
-export const LIMITS = {
-  /** Password attempts per account. The primary brute-force defence. */
-  LOGIN_PER_ACCOUNT: { limit: 5, windowMs: 15 * 60 * 1000 },
-  /** Password attempts per IP — catches credential stuffing across many accounts. */
-  LOGIN_PER_IP: { limit: 20, windowMs: 15 * 60 * 1000 },
-  /** OTP guesses. Tight: a 6-digit code must not be gridable. */
-  OTP_VERIFY: { limit: 5, windowMs: 15 * 60 * 1000 },
-  /** Reset-link requests, to stop mail-bombing an address. */
-  PASSWORD_RESET: { limit: 3, windowMs: 60 * 60 * 1000 },
-  /** Account creation per IP. */
-  SIGNUP: { limit: 5, windowMs: 60 * 60 * 1000 },
-  /** Public forms that trigger outbound email. */
-  PUBLIC_FORM: { limit: 5, windowMs: 60 * 60 * 1000 },
-} as const;
-
-/** Standard 429 body + Retry-After header. */
-export function tooManyRequests(message: string, retryAfter: number): Response {
-  return new Response(JSON.stringify({ message }), {
-    status: 429,
-    headers: {
-      "Content-Type": "application/json",
-      "Retry-After": String(retryAfter),
-    },
-  });
 }

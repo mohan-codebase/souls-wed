@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     // and a 15-minute window it was gridable. Keyed on the account, so an
     // attacker can't sidestep it by rotating IPs.
     const otpKey = `2fa:${role}:${email.toLowerCase().trim()}`;
-    const limited = hit(otpKey, LIMITS.OTP_VERIFY.limit, LIMITS.OTP_VERIFY.windowMs);
+    const limited = await hit(otpKey, LIMITS.OTP_VERIFY.limit, LIMITS.OTP_VERIFY.windowMs);
     if (!limited.ok) {
       // Burn the code entirely — an attacker who has exhausted their guesses
       // should not get another shot when the window rolls over.
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     // Delete the used OTP, clear the guess counter, and burn the pending-2FA
     // cookie so it can't be replayed.
     await Otp.deleteOne({ _id: otpRecord._id });
-    reset(otpKey);
+    await reset(otpKey);
     pending.destroy();
 
     // Create encrypted session cookie

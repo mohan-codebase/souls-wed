@@ -1,85 +1,32 @@
 /**
- * The rate limiter that protects login, OTP verification and the public forms.
+ * Rate limiter — the parts that don't touch the database.
  *
- * Note these tests exercise the in-process implementation. If the limiter is
- * ever moved behind Redis (which it must be before running more than one
- * instance — see the header of lib/rate-limit.ts), these tests should keep
- * passing against the new implementation without modification.
+ * `hit()` and `reset()` are NOT tested here. They were, while the limiter kept
+ * counters in process memory; they now read and write Mongo, because in-memory
+ * counters are useless on Vercel (each serverless invocation gets fresh memory,
+ * so the limit never accumulates). Testing them needs a live database, so their
+ * behaviour is covered end-to-end instead — see the "login is rate limited"
+ * case in tests/api/regression.test.mjs, which hammers the real endpoint and
+ * asserts it starts returning 429.
+ *
+ * What's left here is genuinely pure: header parsing, the configured limits,
+ * and the 429 response shape.
  */
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { hit, reset, clientIp, LIMITS, tooManyRequests } from "../../lib/rate-limit.ts";
-
-/** Unique key per test so the shared in-process map can't leak between them. */
-const key = (name: string) => `test:${name}:${Math.random().toString(36).slice(2)}`;
-
-describe("hit()", () => {
-  test("allows exactly `limit` attempts, then blocks", () => {
-    const k = key("basic");
-    for (let i = 1; i <= 5; i++) {
-      assert.equal(hit(k, 5, 60_000).ok, true, `attempt ${i} should be allowed`);
-    }
-    assert.equal(hit(k, 5, 60_000).ok, false, "6th attempt must be blocked");
-  });
-
-  test("reports how many attempts remain", () => {
-    const k = key("remaining");
-    assert.equal(hit(k, 3, 60_000).remaining, 2);
-    assert.equal(hit(k, 3, 60_000).remaining, 1);
-    assert.equal(hit(k, 3, 60_000).remaining, 0);
-  });
-
-  test("stays blocked once over the limit", () => {
-    const k = key("stays-blocked");
-    for (let i = 0; i < 10; i++) hit(k, 3, 60_000);
-    const result = hit(k, 3, 60_000);
-    assert.equal(result.ok, false);
-    assert.equal(result.remaining, 0);
-  });
-
-  test("returns a positive Retry-After once blocked", () => {
-    const k = key("retry-after");
-    for (let i = 0; i < 6; i++) hit(k, 5, 60_000);
-    const blocked = hit(k, 5, 60_000);
-    assert.equal(blocked.ok, false);
-    assert.ok(blocked.retryAfter > 0, "must tell the caller when to come back");
-    assert.ok(blocked.retryAfter <= 60);
-  });
-
-  test("the window expires and access is restored", async () => {
-    const k = key("window");
-    assert.equal(hit(k, 1, 40).ok, true);
-    assert.equal(hit(k, 1, 40).ok, false, "blocked inside the window");
-    await new Promise((r) => setTimeout(r, 60));
-    assert.equal(hit(k, 1, 40).ok, true, "allowed again after the window");
-  });
-
-  test("keys are independent — one account can't lock out another", () => {
-    const a = key("iso-a");
-    const b = key("iso-b");
-    for (let i = 0; i < 6; i++) hit(a, 5, 60_000);
-    assert.equal(hit(a, 5, 60_000).ok, false);
-    assert.equal(hit(b, 5, 60_000).ok, true, "unrelated key must be unaffected");
-  });
-});
-
-describe("reset()", () => {
-  test("clears a counter, as a successful login does", () => {
-    const k = key("reset");
-    for (let i = 0; i < 6; i++) hit(k, 5, 60_000);
-    assert.equal(hit(k, 5, 60_000).ok, false);
-
-    reset(k);
-    assert.equal(hit(k, 5, 60_000).ok, true, "a correct password shouldn't stay penalised");
-  });
-});
+import { clientIp, LIMITS, tooManyRequests } from "../../lib/rate-limit-config.ts";
 
 describe("clientIp()", () => {
   const req = (headers: Record<string, string>) => new Request("https://x.test", { headers });
 
   test("prefers x-forwarded-for and takes the first hop", () => {
+    // The first entry is the original client; later ones are proxies.
     assert.equal(clientIp(req({ "x-forwarded-for": "1.2.3.4, 5.6.7.8" })), "1.2.3.4");
+  });
+
+  test("trims whitespace around the address", () => {
+    assert.equal(clientIp(req({ "x-forwarded-for": "  1.2.3.4  , 5.6.7.8" })), "1.2.3.4");
   });
 
   test("falls back through the other proxy headers", () => {
@@ -88,7 +35,7 @@ describe("clientIp()", () => {
   });
 
   test("degrades to a constant rather than throwing", () => {
-    // All requests then share one bucket, which is safe-by-default: it limits
+    // All callers then share one bucket, which is safe-by-default: it limits
     // more aggressively, never less.
     assert.equal(clientIp(req({})), "unknown");
   });
@@ -105,6 +52,13 @@ describe("configured limits", () => {
     // Several people can share an office IP; one account is one person.
     assert.ok(LIMITS.LOGIN_PER_IP.limit > LIMITS.LOGIN_PER_ACCOUNT.limit);
   });
+
+  test("every limit is a positive number with a real window", () => {
+    for (const [name, cfg] of Object.entries(LIMITS)) {
+      assert.ok(cfg.limit > 0, `${name} limit must be positive`);
+      assert.ok(cfg.windowMs > 0, `${name} window must be positive`);
+    }
+  });
 });
 
 describe("tooManyRequests()", () => {
@@ -112,6 +66,7 @@ describe("tooManyRequests()", () => {
     const res = tooManyRequests("Slow down.", 42);
     assert.equal(res.status, 429);
     assert.equal(res.headers.get("Retry-After"), "42");
+    assert.equal(res.headers.get("Content-Type"), "application/json");
     assert.deepEqual(await res.json(), { message: "Slow down." });
   });
 });
