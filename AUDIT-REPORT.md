@@ -329,6 +329,47 @@ Verified the two views agree on the same booking:
 
 ---
 
+## Fix log 6 — a regression suite
+
+Every bug in this report was found by hand and verified by hand. Nothing stopped
+a later change silently re-breaking any of it — which matters here, because most
+of these bugs were not logic errors. They were **code that looked correct but
+never ran against real data**: the vendor blocked dates, the vendor bookings
+query, the review pipeline, the admin moderation queue. All four read plausibly
+and all four had never worked.
+
+`tests/` now covers them. Node's built-in runner, **no new dependencies**:
+
+```bash
+npm test          # 44 unit tests, no DB, no server
+npm run test:api  # integration — needs the app running (see tests/README.md)
+```
+
+| Suite | Covers |
+|---|---|
+| `tests/unit/payouts.test.ts` | The money maths — commission from collected not gross, commission + payout reconstituting the collected amount exactly, payouts never exceeding funds held or going negative |
+| `tests/unit/auth.test.ts` | Hashing, every password-policy rule the change-password route used to skip, constant-time OTP comparison |
+| `tests/unit/rate-limit.test.ts` | Window expiry, key isolation, `Retry-After`, counter reset on success |
+| `tests/api/regression.test.mjs` | One `describe` per finding — #1, #2, #13, #3/#5/#11, #14, #6/#9/#10/#15, and the P3 count consistency |
+
+The API assertions were validated against the running app before being written
+down, so the expected status codes and messages are real rather than assumed.
+
+**Gaps, stated plainly:**
+
+- `lib/pricing.ts` has no unit tests — it imports Mongoose models via the `@/`
+  alias, which Node's type stripping can't resolve. Covered at API level instead.
+  Extracting the pure formula into an import-free module would fix this.
+- **The real Stripe flow is untested.** `create-order`, the redirect and the
+  webhook have never been exercised; only the offline-payment path has. Needs
+  Stripe test keys and the CLI to forward webhooks.
+- **Email delivery is unverified** — the code dispatches correctly and doesn't
+  block, but nothing confirms a message arrives.
+- **No CI.** Wiring `npm test` into a GitHub Action would turn the unit tests
+  from something to remember into an actual safety net.
+
+---
+
 ## Remaining actions for you
 
 Three scripts, all dry-run by default:
