@@ -70,10 +70,54 @@ const CITY_COUNTRY = {
 
 const PLACEHOLDER_COUNTRIES = new Set(["", "global", "n/a", "unknown", null, undefined]);
 
+/**
+ * Titlecase a country parsed out of free text, preserving the small words and
+ * acronyms that shouldn't be capitalised ("UAE", "United States of America").
+ */
+function tidyCountry(raw) {
+  const s = raw.trim().replace(/\s+/g, " ");
+  if (!s) return null;
+  // Leave existing acronyms alone (UAE, USA, UK).
+  if (/^[A-Z]{2,4}$/.test(s)) return s;
+  return s
+    .split(" ")
+    .map((w) =>
+      w.length <= 2 && w === w.toUpperCase()
+        ? w
+        : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    )
+    .join(" ");
+}
+
 function inferCountry(doc) {
   const current = String(doc.country ?? "").trim();
   if (!PLACEHOLDER_COUNTRIES.has(current.toLowerCase())) return null; // already fine
 
+  // ── 1. The country is often already sitting in the city field ──
+  // Many listings store `city` as "City, Country" — "Bali, Indonesia",
+  // "Paris, France", "Dubai, UAE". The first version of this script only had a
+  // hand-written city lookup and missed all of those, leaving 12 listings for
+  // manual editing. Read the tail of the string first; it's more reliable than
+  // any lookup table because it's the data the listing already carries.
+  for (const field of [doc.city, doc.location]) {
+    const value = String(field ?? "").trim();
+    if (!value.includes(",")) continue;
+
+    const tail = value.split(",").pop();
+    const candidate = tidyCountry(tail ?? "");
+    // Guard against a trailing fragment that's obviously not a country —
+    // a postcode, a house number, or the placeholder itself.
+    if (
+      candidate &&
+      candidate.length >= 3 &&
+      !/\d/.test(candidate) &&
+      !PLACEHOLDER_COUNTRIES.has(candidate.toLowerCase())
+    ) {
+      return candidate;
+    }
+  }
+
+  // ── 2. Fall back to the city lookup ──
   const haystack = [doc.city, doc.location, doc.name]
     .filter(Boolean)
     .join(" ")
