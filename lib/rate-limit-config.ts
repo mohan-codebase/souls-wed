@@ -58,6 +58,18 @@ export const LIMITS = {
   SIGNUP: { limit: 5, windowMs: 60 * 60 * 1000 },
   /** Public forms that trigger outbound email. */
   PUBLIC_FORM: { limit: 5, windowMs: 60 * 60 * 1000 },
+  /**
+   * Submitting a new password with a reset token. The token itself is 256-bit
+   * and unguessable, so this is abuse-limiting rather than anti-brute-force —
+   * generous enough that a real user fumbling the password rules isn't blocked.
+   */
+  RESET_PASSWORD: { limit: 10, windowMs: 15 * 60 * 1000 },
+  /**
+   * Anonymous page-view pings. Frequent by design (one per detail-page load),
+   * so this is a high ceiling that only stops scripted flooding of the
+   * PageView collection and analytics inflation.
+   */
+  VIEW_TRACK: { limit: 100, windowMs: 60 * 1000 },
 } as const;
 
 /** Standard 429 body + Retry-After header. */

@@ -856,3 +856,37 @@ be notified and can't respond isn't a vendor.
 
 **Then:** #6, #7, #9, #10 for auth hardening, #8 and #13 for calendar correctness, #11 and #12 for
 day-to-day operability.
+
+---
+
+## Fix log 7 — July 30 production re-audit
+
+Six net-new findings from the live-deployment re-audit, fixed. (P0 #1, secret
+rotation, is the user's manual task and is intentionally not code-fixed here.)
+
+| # | Sev | Change | Files |
+|---|---|---|---|
+| 4 | P1 | NoSQL regex injection / ReDoS / driver-error disclosure closed — `country`, `city`, `search` are now `escapeRegex()`'d before reaching `$regex` on all three public list APIs. `escapeRegex` extracted to an import-free module so it's unit-testable; the vendors route's duplicate copy removed. | `lib/search/escape-regex.ts` (new), `lib/search/filters.ts`, `app/api/vendors/route.ts`, `app/api/venues/route.ts`, `app/api/services/route.ts` |
+| 3 | P1 | Public `/api/vendors` switched from a `-passwordHash` deny-list to an explicit allow-list projection, so it no longer leaks `email`, `lastLoginAt/Device/Method` or `twoFactorEnabled`. Applied to both the list and `?id=` branches. | `app/api/vendors/route.ts` |
+| 2 | P1 | Customer "Cancel Booking" no longer hard-deletes a paid/confirmed booking. Server refuses `DELETE` for any non-admin booking that is paid or non-pending (use PATCH `cancel`); the card routes a confirmed cancel through PATCH, preserving the record and flagging the refund. | `app/api/bookings/route.ts`, `components/booking/BookingCard.tsx` |
+| 5 | P1 | Double-booking race closed at the database: a unique partial multikey index on `{ providerId, eventDates }` (active statuses only) rejects a second booking for the same date; `POST /api/bookings` maps the E11000 to its existing 409. Build the index with the new script (autoIndex is unreliable on serverless). | `lib/models/Booking.ts`, `app/api/bookings/route.ts`, `scripts/create-booking-indexes.mjs` (new) |
+| 6 | P2 | `verify-otp` now rate-limited (OTP_VERIFY, per account) — unlimited 6-digit guesses closed; `reset-password` capped per IP. | `app/api/auth/verify-otp/route.ts`, `app/api/auth/reset-password/route.ts`, `lib/rate-limit-config.ts` |
+| 7 | P2 | Anonymous `POST /api/views` rate-limited per IP and now validates the provider exists, so it can't be scripted to bloat the collection or inflate a provider's view/demand count. | `app/api/views/route.ts`, `lib/rate-limit-config.ts` |
+
+**Tests:** `tests/unit/escape-regex.test.ts` (new) covers the injection fix
+(match-all bypass, malformed pattern, ReDoS payload — all defused to literals).
+`tests/api/regression.test.mjs` gained a July-30 block asserting: public search
+returns no 500 on a malformed pattern and no rows on a bypass pattern;
+`/api/vendors` exposes none of the leaked fields; `verify-otp` starts returning
+429. `tsc --noEmit` clean; unit suite green; no new lint errors.
+
+### ⚠ Action required before this is finished
+
+1. **Build the double-booking index** (finding #5 is only fully closed once it exists):
+   ```bash
+   node scripts/create-booking-indexes.mjs            # reports existing conflicts, writes nothing
+   node scripts/create-booking-indexes.mjs --apply    # builds the unique index
+   ```
+   If it reports existing double-bookings, resolve those first — the index can't
+   build over them. Requires MongoDB 5.3+ (Atlas is fine).
+2. **Rotate the leaked secrets** (P0 #1) — still outstanding, still only you can do it.

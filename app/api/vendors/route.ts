@@ -6,6 +6,17 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
+import { escapeRegex } from "@/lib/search/escape-regex";
+
+// Fields safe to expose on the public vendor discovery API. An explicit
+// allow-list, NOT a `-passwordHash` deny-list: the deny-list returned every
+// other field, leaking the vendor's `email` plus login telemetry
+// (`lastLoginAt` / `lastLoginDevice` / `lastLoginMethod`) and
+// `twoFactorEnabled` — the last of which advertises which accounts lack 2FA.
+// `reviews` is deliberately omitted; the detail page fetches it from
+// /api/vendors/[id]/reviews, and it can carry the reviewer's identity.
+const PUBLIC_VENDOR_FIELDS =
+  "name businessName category categories city country description website instagram rating reviewCount advancePercentage unavailableDates profileImage images featured verified available faqs createdAt";
 
 export async function GET(req: Request) {
   try {
@@ -21,7 +32,7 @@ export async function GET(req: Request) {
     if (id) {
       let vendor: any = null;
       if (mongoose.Types.ObjectId.isValid(id)) {
-        vendor = await Vendor.findById(id).select("-passwordHash").lean();
+        vendor = await Vendor.findById(id).select(PUBLIC_VENDOR_FIELDS).lean();
       }
 
       if (!vendor) {
@@ -63,21 +74,26 @@ export async function GET(req: Request) {
       available: true,
     };
 
+    // Every user-supplied value is escaped before it reaches $regex. Without
+    // this, `?city=^.*$` matches every document (filter bypass) and a malformed
+    // pattern like `?search=(((` throws a driver error that leaked straight to
+    // the client as a 500 — and a catastrophic pattern is a ReDoS vector.
     if (category) query.category = { $regex: `^${escapeRegex(category)}$`, $options: "i" };
-    if (country) query.country = { $regex: country, $options: "i" };
-    if (city) query.city = { $regex: city, $options: "i" };
+    if (country) query.country = { $regex: escapeRegex(country), $options: "i" };
+    if (city) query.city = { $regex: escapeRegex(city), $options: "i" };
     if (featured) query.featured = true;
     if (search) {
+      const safe = escapeRegex(search);
       query.$or = [
-        { businessName: { $regex: search, $options: "i" } },
-        { name: { $regex: search, $options: "i" } },
-        { category: { $regex: search, $options: "i" } },
-        { city: { $regex: search, $options: "i" } },
+        { businessName: { $regex: safe, $options: "i" } },
+        { name: { $regex: safe, $options: "i" } },
+        { category: { $regex: safe, $options: "i" } },
+        { city: { $regex: safe, $options: "i" } },
       ];
     }
 
     const vendors = await Vendor.find(query)
-      .select("-passwordHash")
+      .select(PUBLIC_VENDOR_FIELDS)
       .sort({ featured: -1, rating: -1, createdAt: -1 })
       .limit(60)
       .lean();
@@ -189,8 +205,4 @@ function sanitizeUnavailableDates(value: unknown) {
     .map((item) => new Date(item as string))
     .filter((date) => !Number.isNaN(date.getTime()))
     .slice(0, 200);
-}
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

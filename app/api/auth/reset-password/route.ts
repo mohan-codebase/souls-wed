@@ -5,9 +5,25 @@ import { User } from "@/lib/models/User";
 import { Vendor } from "@/lib/models/Vendor";
 import { Admin } from "@/lib/models/Admin";
 import { hashPassword, validatePassword } from "@/lib/auth";
+import { hit, clientIp, LIMITS, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    // Cap reset submissions per IP. The token is unguessable, so this is
+    // abuse-limiting, not anti-brute-force — but an unthrottled write endpoint
+    // shouldn't be left open.
+    const rl = await hit(
+      `reset-password:${clientIp(req)}`,
+      LIMITS.RESET_PASSWORD.limit,
+      LIMITS.RESET_PASSWORD.windowMs
+    );
+    if (!rl.ok) {
+      return tooManyRequests(
+        "Too many password reset attempts. Please try again in a few minutes.",
+        rl.retryAfter
+      );
+    }
+
     const { token, password } = await req.json();
 
     if (!token || !password) {

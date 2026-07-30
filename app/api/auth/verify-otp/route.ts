@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { SessionData, sessionOptions } from "@/lib/session";
+import { hit, LIMITS, tooManyRequests } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
@@ -20,8 +21,24 @@ export async function POST(req: Request) {
       );
     }
 
+    // Cap OTP guesses. A 6-digit code is only 1,000,000 possibilities; with no
+    // limit and a 15-minute TTL it was gridable, so an attacker could brute-force
+    // email verification. Keyed per account+role so rotating IPs doesn't help.
+    const cleanEmail = email.toLowerCase().trim();
+    const otpKey = `verify-otp:${role}:${cleanEmail}`;
+    const limited = await hit(otpKey, LIMITS.OTP_VERIFY.limit, LIMITS.OTP_VERIFY.windowMs);
+    if (!limited.ok) {
+      // Burn the pending code so exhausting the guesses ends the attempt rather
+      // than handing over a fresh window.
+      await Otp.deleteMany({ email: cleanEmail, role });
+      return tooManyRequests(
+        "Too many incorrect codes. Please sign up again to request a new one.",
+        limited.retryAfter
+      );
+    }
+
     // Check OTP
-    const otpRecord = await Otp.findOne({ email: email.toLowerCase().trim(), role, otp });
+    const otpRecord = await Otp.findOne({ email: cleanEmail, role, otp });
     
     if (!otpRecord) {
       return NextResponse.json(

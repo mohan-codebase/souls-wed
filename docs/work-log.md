@@ -1515,3 +1515,59 @@ text or `aria-disabled` elements anywhere on the page.
 - Everything already listed as outstanding from the July 28 session (guest/budget filters
   unverifiable against real inventory, mobile hero bar not collapsed, orphaned
   `/vendors/[category]` route).
+
+---
+
+## July 30, 2026 — Production flow re-audit (verification pass)
+
+Re-ran the full-app flow audit against the **live Vercel deployment** (souls-wed.vercel.app),
+following up on the July 29 audit that shipped six fix batches. Goal: confirm the prior fixes
+hold in production and surface anything net-new. Method: unauthenticated API probing against
+prod + source review; no test data was written to the production DB.
+
+**Prior fixes verified holding in production:**
+- MongoDB-backed rate limiter genuinely bites on serverless — login per-account (5) and
+  per-IP (20) both fire with 429 + Retry-After. This was the concern behind the last commit.
+- All 9 admin endpoints correctly 401 unauthenticated; `/api/vendor/earnings` gated.
+- 2FA reads identity from the sealed pending cookie, constant-time compares, burns the code.
+- Server-side price authority, payment amount/session-binding checks, and the separated
+  paymentStatus/status money model are all intact.
+- forgot-password does not enumerate accounts.
+
+**Net-new / still-open findings (see audit response for detail + fixes):**
+- P0: committed secrets still live in 13 git-history commits (SESSION_SECRET, ADMIN_ACCESS_CODE,
+  Stripe secret, Mongo URI, SMTP, Cloudinary). Rotation still not done.
+- P1: customer "Cancel Booking" hard-deletes confirmed+PAID bookings via DELETE /api/bookings —
+  destroys the payment/payout record, silently drops admin revenue, no refund trail.
+- P1: /api/vendors leaks email + login telemetry (lastLoginAt/Device/Method, twoFactorEnabled)
+  publicly via deny-list projection.
+- P1: NoSQL regex injection + ReDoS + Mongo error disclosure on /api/vendors, /api/venues,
+  /api/services (country/city/search unescaped into $regex).
+- P1: double-booking race — no unique index on Booking; conflict check is findOne-then-save.
+- P2: verify-otp unlimited guesses; PageView POST unauthenticated + unbounded writes.
+
+### Outstanding
+- The three data-migration scripts (payment backfill, orphan repair, listing data quality)
+  could not be confirmed as run against prod from outside — needs verifying with DB access.
+
+### July 30 — fixes implemented (same session)
+
+Implemented all re-audit findings except secret rotation (the user's manual task):
+- #4 regex injection: escaped country/city/search on /api/vendors, /api/venues,
+  /api/services; extracted escapeRegex into an import-free, unit-tested module.
+- #3 PII leak: /api/vendors now uses an allow-list projection (no email/login telemetry).
+- #2 paid-booking deletion: DELETE guards paid/non-pending for non-admins; the booking
+  card routes confirmed cancels through PATCH (record + refund preserved).
+- #5 double-booking race: unique partial index on {providerId, eventDates} + E11000→409;
+  new scripts/create-booking-indexes.mjs to build it (autoIndex unreliable on serverless).
+- #6/#7: rate-limited verify-otp, reset-password, and the anonymous /api/views write
+  (which now also validates the provider exists).
+
+tsc clean, unit suite green (escape-regex tests added), no new lint errors. Could not
+exercise live — the app runs on Vercel against Atlas and I won't write to prod data.
+
+### Outstanding (must run in the user's environment)
+- `node scripts/create-booking-indexes.mjs --apply` to build the double-booking index.
+- Rotate the six leaked secrets (SESSION_SECRET, ADMIN_ACCESS_CODE, Stripe, Mongo, SMTP,
+  Cloudinary) — still readable in 13 git-history commits.
+- Deploy, then re-run the live probes to confirm the fixes hold in production.

@@ -164,6 +164,35 @@ const BookingSchema = new Schema({
   updatedAt: { type: Date, default: Date.now },
 });
 
+// ─── DOUBLE-BOOKING GUARD ─────────────────────────────────────
+//
+// POST /api/bookings checks for a date conflict before inserting, but the check
+// and the insert are two separate round-trips: two requests (a double-clicked
+// submit, or two racing clients) can both pass the check before either saves,
+// and both bookings are created for the same date. A unique index makes the
+// database itself reject the second write, closing that race.
+//
+// Multikey on `eventDates` so ANY shared date between two active bookings for
+// the same provider collides — not only the first date of a multi-day event.
+// Partial so the constraint applies only while a booking actually holds the
+// date: cancelled/completed bookings fall out of the index and the date becomes
+// free to rebook. Room stays (which set checkIn/checkOut, not eventDates) are
+// excluded and still rely on the application-level overlap check.
+//
+// `$in` in a partialFilterExpression needs MongoDB 5.3+ (Atlas is well past it).
+// autoIndex is unreliable on serverless, so build this explicitly with
+// scripts/create-booking-indexes.mjs.
+BookingSchema.index(
+  { providerId: 1, eventDates: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ["pending", "confirmed"] },
+      eventDates: { $exists: true },
+    },
+  }
+);
+
 // Pre-save hook: automatically update `updatedAt` on every save
 BookingSchema.pre("save", function () {
   this.updatedAt = new Date();

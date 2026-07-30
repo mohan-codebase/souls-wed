@@ -8,9 +8,10 @@ import type { SearchQuery } from "@/lib/config/search";
 // about what `?guests=250` means. See docs/hero-search-analysis.md §8.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function escapeRegex(input: string): string {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+// Lives in its own import-free module so it can be unit-tested; re-exported here
+// so existing call sites keep importing it from "@/lib/search/filters".
+export { escapeRegex } from "./escape-regex";
+import { escapeRegex } from "./escape-regex";
 
 /** Case-insensitive substring match on `city`. */
 export function cityFilter(city: string | null | undefined): Record<string, unknown> {

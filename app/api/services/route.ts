@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
 import { sanitizeMediaList, toVideoEmbedUrl } from "@/lib/media";
+import { escapeRegex } from "@/lib/search/filters";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET — public (active only); vendors/admins see all including inactive
@@ -47,16 +48,20 @@ export async function GET(req: Request) {
     const verified = searchParams.get("verified");
     const search = searchParams.get("search");
 
+    // User-supplied values are escaped before reaching $regex — see the note in
+    // app/api/vendors/route.ts. Raw interpolation allowed a filter bypass
+    // (`?city=^.*$`), leaked driver errors as 500s, and opened a ReDoS vector.
     if (id)       query.serviceId  = id;
-    if (country)  query.country  = { $regex: country, $options: "i" };
-    if (city)     query.city     = { $regex: city, $options: "i" };
+    if (country)  query.country  = { $regex: escapeRegex(country), $options: "i" };
+    if (city)     query.city     = { $regex: escapeRegex(city), $options: "i" };
     if (featured) query.featured = true;
     if (verified) query.verified = true;
     if (search) {
+      const safe = escapeRegex(search);
       query.$or = [
-        { name:     { $regex: search, $options: "i" } },
-        { city:     { $regex: search, $options: "i" } },
-        { location: { $regex: search, $options: "i" } },
+        { name:     { $regex: safe, $options: "i" } },
+        { city:     { $regex: safe, $options: "i" } },
+        { location: { $regex: safe, $options: "i" } },
       ];
     }
 

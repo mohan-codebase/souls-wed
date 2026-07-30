@@ -161,11 +161,22 @@ export default function BookingCard({ booking, isVendor = false }: BookingCardPr
     setDeleting(true);
     setPaymentError(null);
     try {
-      const res = await fetch("/api/bookings", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: booking._id ?? booking.id }),
-      });
+      // A confirmed booking may hold a paid advance. Cancel it through PATCH so
+      // the record survives and any refund is flagged — never hard-delete a
+      // booking that could carry money. Only an unpaid, still-pending booking is
+      // removed outright (an abandoned request the customer never paid for).
+      const res =
+        booking.status === "confirmed"
+          ? await fetch(`/api/bookings/${booking._id ?? booking.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "cancel" }),
+            })
+          : await fetch("/api/bookings", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ bookingId: booking._id ?? booking.id }),
+            });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to cancel booking");
 

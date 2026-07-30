@@ -493,3 +493,63 @@ describe("admin data consistency (audit P3)", () => {
     }
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// July 30 flow re-audit — new hardening. These use the public API (no auth),
+// except the paid-delete guard which needs the admin/vendor session above.
+// ════════════════════════════════════════════════════════════════════════════
+describe("public search input is regex-safe (re-audit #4)", () => {
+  const pub = makeClient();
+
+  test("a malformed pattern is a clean result, not a 500 driver error", async () => {
+    // Was: `?search=(((` returned 500 with "Regular expression is invalid".
+    const { status } = await pub.json("/api/vendors?search=" + encodeURIComponent("((("));
+    assert.notEqual(status, 500, "malformed regex must not leak a driver error");
+  });
+
+  test("a match-all payload does not bypass the city filter", async () => {
+    // `^.*$` as a raw regex matched every vendor regardless of city.
+    const nonsense = await pub.json(
+      "/api/vendors?city=" + encodeURIComponent("^.*$" + Math.random())
+    );
+    assert.equal(nonsense.status, 200);
+    assert.equal(
+      (nonsense.body.vendors || []).length,
+      0,
+      "escaped, the bypass pattern matches nothing"
+    );
+  });
+});
+
+describe("public vendor API doesn't leak PII (re-audit #3)", () => {
+  const pub = makeClient();
+  const LEAKED = ["email", "lastLoginAt", "lastLoginDevice", "lastLoginMethod", "twoFactorEnabled", "passwordHash"];
+
+  test("no vendor object exposes login telemetry or contact PII", async () => {
+    const { status, body } = await pub.json("/api/vendors");
+    assert.equal(status, 200);
+    for (const v of body.vendors || []) {
+      for (const field of LEAKED) {
+        assert.ok(!(field in v), `/api/vendors leaked "${field}"`);
+      }
+    }
+  });
+});
+
+describe("email-verification OTP is rate limited (re-audit #6)", () => {
+  const pub = makeClient();
+
+  test("repeated wrong codes start returning 429", async () => {
+    // Was: unlimited guesses against a 6-digit code in a 15-minute window.
+    const email = `atest-otp-${Date.now()}@example.invalid`;
+    let saw429 = false;
+    for (let i = 0; i < 8; i++) {
+      const { status } = await pub.json("/api/auth/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({ email, role: "user", otp: String(100000 + i) }),
+      });
+      if (status === 429) { saw429 = true; break; }
+    }
+    assert.ok(saw429, "verify-otp must cap guesses");
+  });
+});

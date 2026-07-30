@@ -272,7 +272,25 @@ export async function POST(req: Request) {
       currency: currency || "INR",
     });
 
-    await newBooking.save();
+    try {
+      await newBooking.save();
+    } catch (saveErr: unknown) {
+      // Unique-index violation (E11000) means another booking grabbed one of
+      // these dates between our conflict check above and this insert — the
+      // concurrent / double-submit race the index exists to catch. Surface it
+      // as the same 409 the pre-check returns rather than a 500.
+      if (
+        typeof saveErr === "object" &&
+        saveErr !== null &&
+        (saveErr as { code?: number }).code === 11000
+      ) {
+        return NextResponse.json(
+          { message: "This date was just booked. Please select a different date." },
+          { status: 409 }
+        );
+      }
+      throw saveErr;
+    }
 
     // Notify customer, vendor and admin. Fire-and-forget: a slow SMTP server
     // must never delay (or fail) the booking itself.
@@ -407,6 +425,26 @@ export async function DELETE(req: Request) {
       return NextResponse.json(
         { message: "You don't have permission to delete this booking." },
         { status: 403 }
+      );
+    }
+
+    // A paid booking is a financial record: hard-deleting it erases the payment,
+    // the vendor's payout row, and the revenue it contributed — silently. A
+    // customer must cancel through PATCH /api/bookings/[id] (action: "cancel"),
+    // which keeps the record and flags the refund. Only a still-pending, unpaid
+    // booking may be deleted outright, and only by its owner (admins retain the
+    // hard delete for genuine cleanup).
+    if (
+      session.role !== "admin" &&
+      (booking.paymentStatus === "paid" || booking.status !== "pending")
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "This booking can't be deleted. Cancel it instead so the record and any refund are preserved.",
+          useCancel: true,
+        },
+        { status: 409 }
       );
     }
 
