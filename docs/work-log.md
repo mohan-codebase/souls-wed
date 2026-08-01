@@ -1571,3 +1571,131 @@ exercise live — the app runs on Vercel against Atlas and I won't write to prod
 - Rotate the six leaked secrets (SESSION_SECRET, ADMIN_ACCESS_CODE, Stripe, Mongo, SMTP,
   Cloudinary) — still readable in 13 git-history commits.
 - Deploy, then re-run the live probes to confirm the fixes hold in production.
+
+---
+
+## July 31, 2026 — Legacy content import (Venues, Planners, Photographers, Decorators, Makeup Artists)
+
+Client asked to fill the "empty category" gap for the five categories that existed on the
+old soulswed.com (per the boss: these five need to be complete, the rest can wait). The old
+site's compiled front-end, run locally by the user, turned out to still call its real backend
+at `api.soulswed.com` — a live, read-only, unauthenticated API with real listing data, not a
+demo/seed dataset. Counted 831 usable (non-test, active) records across the five categories;
+imported the first 100 per category (500 total) rather than all 831, per instruction.
+
+**Environment setup, in order (documented because it took a few wrong turns):**
+- No local `.env` existed in this checkout. `vercel link` + `vercel env pull` found that
+  `MONGODB_URI` is Vercel-scoped to Production only — there is no separate dev database.
+- `MONGODB_URI` is marked **Sensitive** in Vercel, so even an authenticated CLI pull cannot
+  read the value back — by design. The user supplied a `.env` with real production secrets
+  directly instead.
+- Connected read-only to confirm identity before writing anything: the `soulswed` database
+  had 8 real bookings, 7 users, 2 admins — genuinely production, not safe to bulk-write
+  500 unverified records into. Built a second database, `soulswed-dev`, on the **same**
+  Atlas cluster/credentials (just a different database name in the URI path) — this needed
+  no new Atlas login, and gave a real, isolated, empty target. Verified empty before writing.
+- Because production secrets (Mongo, Stripe, SMTP, Cloudinary, session secret, admin code)
+  passed through this chat in plain text, on top of already being in 13 leaked git-history
+  commits (see the July 30 entry above) — **all of them, not just Mongo, should be treated
+  as compromised and rotated**, not just Mongo.
+
+**Import (`scripts/import-legacy-listings.mjs`, dry-run by default, `--apply` to write):**
+- Maps old records → `Venue` (venues) / `ServiceListing` (planners, photography, decorators,
+  makeup) documents. Old image paths resolve at `https://soulswed.com/images/...`, which was
+  already on the `next.config.ts` optimized-host allow-list — no config change needed.
+- Non-INR prices (125 of 831 records — mostly USD, EUR, CHF) converted to INR using static
+  rates fixed at import time (not a live feed — will drift, same caveat any fixed-rate
+  approach has).
+- Refused to run unless `MONGODB_URI` points at `soulswed-dev`, as a guard against accidentally
+  re-running against production later.
+- Found and fixed one data-quality bug during the dry run before writing: when the old API's
+  `city` field was blank, the naive fallback used the full `cityname` address string (e.g.
+  venue city rendering as "25 W 28th St, New York, NY 10001, United States"). Added a parser
+  that strips digit-containing segments (street numbers, ZIPs) and keeps the first clean
+  segment — same class of bug as the "country: Global" fix from the audit.
+- All 500 documents written with `vendorId` pointing at one shared vendor account
+  (`vendor@soulswed.com`, created fresh in `soulswed-dev` since it didn't exist there) and
+  `verified: false`, so nothing is publicly visible until reviewed and flipped live.
+
+**Result:** `soulswed-dev` now has 100 venues + 400 service listings (100 each: planners,
+photography, decorators, makeup), all pending review.
+
+**Same-day follow-up: verified in dev, then run against production.** The admin dashboard
+reads the real `soulswed` database, not `soulswed-dev`, so none of the above was visible
+there — expected, but surfaced as "I can't see it" until clarified. Once confirmed the
+mapping looked right, ran the identical import against production:
+- Added an explicit `--target=production` flag to `import-legacy-listings.mjs`; the
+  safety check now requires the database name in `MONGODB_URI` to match the target
+  (`soulswed-dev` by default, `soulswed` only with the flag) — can't hit prod by
+  forgetting a flag.
+- Re-ran against `soulswed`: found the existing `vendor@soulswed.com` account (didn't
+  create a duplicate) and wrote the same 500 documents, all `verified: false`.
+- Separately wrote `scripts/verify-legacy-listings.mjs` and ran it (`--apply`, no
+  `--target` support yet) against `soulswed-dev` only, to flip its 500 dev-copy documents
+  to `verified: true` for review purposes. Production's 500 are still unverified/pending,
+  as agreed.
+
+**Same-day follow-up: image URL encoding bug.** Asked to confirm everything was actually
+working rather than just "wrote without erroring" — checked, and it wasn't: 105 of the 500
+imported image URLs carried the old filename's raw spaces straight through (e.g.
+`.../Screenshot 2024-10-29 195153.png`), which 404s/breaks unencoded in `<img>`/`next/image`.
+Fixed `imageUrl()` in the import script to percent-encode each path segment, and wrote
+`scripts/fix-legacy-image-encoding.mjs` to patch the records already written (dry-run by
+default, same `--target=dev|production` guard as the import script). Ran it against both
+databases: 32 venues + 73 servicelistings fixed in each. Spot-checked three of the
+previously-broken URLs directly — all now 200.
+
+Also surfaced, not fixed (real data gap, not a bug): 391 of the 400 imported service
+listings have no description in the old data. Left as-is rather than inventing copy —
+same principle as the fabricated-testimonials fix from the July 29 session.
+
+**Same-day follow-up: a real runtime crash, and a bigger image bug underneath it.** User
+hit `Cannot read properties of undefined (reading 'filter')` at
+`components/venues/VenueReviews.tsx:15` on a live venue detail page. Root cause: the import
+script wrote documents via `Model.updateOne(..., { upsert: true })`, which bypasses
+Mongoose's schema defaults — array fields not explicitly included in the mapped object
+(`reviews`, `faqs`, `features`) were simply absent from the inserted document rather than
+defaulting to `[]`, so any component calling `.filter()`/`.map()` on them without a guard
+crashed. Fixed three ways: patched all 500 already-written documents (both databases) to
+add the missing empty arrays (`scripts/fix-legacy-missing-arrays.mjs`); added the three
+fields explicitly to `import-legacy-listings.mjs`'s mapping functions so future runs can't
+recreate the bug; added `reviews={venue.reviews || []}` at the one call site
+(`app/(public)/venues/[id]/page.tsx`) that lacked the same defensive fallback
+`PublicVendorDetailPage.tsx` already used elsewhere.
+
+While verifying that fix in a browser, caught something worse: **every one of the 500
+imported images was actually broken**, not just the 105 with unencoded spaces fixed
+earlier. The "images resolve at soulswed.com (200 OK)" check from the original import
+session was wrong — it only checked the HTTP status code, and `soulswed.com` (the new
+app's own domain) is currently in full maintenance mode, so *every* path on it, including
+nonsense ones, returns 200 with a maintenance HTML page. The real image base, recovered
+from the old Angular bundle's compiled source (`serverpath = middletierhost + "/uploads"`,
+`middletierhost = "https://api.soulswed.com"`), is `https://api.soulswed.com/uploads` —
+confirmed for real this time by checking `Content-Type: image/jpeg`, not just status code.
+Fixed: `OLD_IMAGE_BASE` in the import script, `scripts/fix-legacy-image-host.mjs` to patch
+all 500 already-written documents in both databases, and added `api.soulswed.com` to
+`OPTIMIZED_IMAGE_HOSTS` in `lib/image-hosts.ts` so these get optimized rather than falling
+back unoptimized. Verified in an actual browser (dev server restarted — next.config.ts
+changes need a restart, not just HMR) against both a venue and a service-listing detail
+page: real photos render, no console errors, no crash.
+
+### Outstanding
+- **Review the 500 imported listings in production** (Services & Venues → filter by
+  `vendor@soulswed.com`) and flip `verified: true` on the ones to actually publish.
+  `scripts/verify-legacy-listings.mjs` currently only targets `soulswed-dev` — extend it
+  with the same `--target=production` pattern if a bulk flip (vs. one-by-one in admin) is
+  wanted later.
+- 391 of 400 service listings have no description — needs real copy, per-listing, from
+  whoever owns that content; not something to fabricate.
+- Decide: same shared vendor-account model going forward, or per-business accounts using
+  the old listing's real email; whether to raise the 100/category cap for the remaining
+  content gap; whether to convert currency at a live rate instead of the static one used
+  here.
+- Find out why `soulswed.com` (the custom domain) is in full maintenance mode while
+  `souls-wed.vercel.app` serves the real site — that's a separate, pre-existing issue
+  surfaced during this session's image debugging, not something this session caused or
+  fixed.
+- Rotate all production secrets (not just the six from the July 30 audit) — they passed
+  through this chat session in plain text on top of the pre-existing git-history exposure.
+- `.env.production.local` (pulled during this session, contains real production secrets) is
+  gitignored but still sitting on disk at the project root — delete it once no longer needed.

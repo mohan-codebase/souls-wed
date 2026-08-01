@@ -30,8 +30,6 @@ const GUEST_SENSITIVE = new Set([
   "caterers",
   "planners",
   "decorators",
-  "cakes",
-  "transport",
   "airlines",
 ]);
 
@@ -69,10 +67,8 @@ export function heroSearchFields(category: VendorCategory | null): SearchField[]
 // ─────────────────────────────────────────────────────────────────────────────
 // GROUPED CATEGORY PICKER
 //
-// 39 categories in one scrolling column is a wall. Grouping them by what the
-// couple is actually shopping for makes the list scannable in one pass.
-// Every slug in VENDOR_CATEGORIES appears exactly once; `UNGROUPED_CATEGORIES`
-// below catches any category added later that nobody filed into a group.
+// Grouping categories by what the couple is actually shopping for makes the list
+// scannable in one pass. Every slug in VENDOR_CATEGORIES appears in a group.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CategoryGroup {
@@ -82,17 +78,13 @@ export interface CategoryGroup {
 
 export const CATEGORY_GROUPS: CategoryGroup[] = [
   { label: "Venue & Stay",       slugs: ["venues", "rooms"] },
-  { label: "Planning",           slugs: ["planners", "personal-shoppers", "detectives"] },
-  { label: "Food & Cake",        slugs: ["caterers", "cakes"] },
-  { label: "Decor & Flowers",    slugs: ["decorators", "florists", "entrance-specialists", "laser-shows"] },
+  { label: "Planning",           slugs: ["planners"] },
+  { label: "Food",                slugs: ["caterers"] },
+  { label: "Decor & Flowers",    slugs: ["decorators", "florists"] },
   { label: "Photo & Film",       slugs: ["photography"] },
-  { label: "Entertainment",      slugs: ["music", "dj", "choreography"] },
-  { label: "Beauty & Grooming",  slugs: ["makeup", "hair", "mehndi", "spa", "skin-specialists", "cosmetic-dentist", "image-consulting"] },
-  { label: "Fashion & Jewellery",slugs: ["fashion-designers", "bridal-wear", "groom-wear", "jewellers"] },
-  { label: "Rituals",            slugs: ["priests", "astrologers"] },
-  { label: "Invites & Gifting",  slugs: ["invitations", "gifts", "wedding-accessories", "packaging"] },
-  { label: "Health & Wellbeing", slugs: ["gyms", "dieticians", "counsellors", "sexologists"] },
-  { label: "Travel & Logistics", slugs: ["airlines", "transport", "travel"] },
+  { label: "Entertainment",      slugs: ["choreography"] },
+  { label: "Beauty & Styling",   slugs: ["makeup", "hair", "mehndi"] },
+  { label: "Travel & Flights",   slugs: ["airlines"] },
 ];
 
 const BY_SLUG = new Map(VENDOR_CATEGORIES.map((c) => [c.slug, c]));

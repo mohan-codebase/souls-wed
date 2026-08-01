@@ -33,20 +33,17 @@ const itemVariants: Variants = {
 export default function CategoriesPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const top12Categories = useMemo(() => VENDOR_CATEGORIES.slice(0, 12), []);
-  const remainingCategories = useMemo(() => VENDOR_CATEGORIES.slice(12), []);
-
   // Filter for search
-  const filteredRemaining = useMemo(() => {
-    if (!searchQuery.trim()) return remainingCategories;
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return VENDOR_CATEGORIES;
     const q = searchQuery.toLowerCase();
-    return remainingCategories.filter(
+    return VENDOR_CATEGORIES.filter(
       (cat) =>
         cat.name.toLowerCase().includes(q) ||
         cat.tagline.toLowerCase().includes(q) ||
         cat.slug.toLowerCase().includes(q)
     );
-  }, [searchQuery, remainingCategories]);
+  }, [searchQuery]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[var(--sw-deep-navy)] pt-32 pb-24">
@@ -80,9 +77,9 @@ export default function CategoriesPage() {
           </p>
         </motion.div>
 
-        {/* ── TOP 12 IMAGE CATEGORIES GRID ────────────────────────────────────────── */}
+        {/* ── IMAGE CATEGORIES GRID ────────────────────────────────────────── */}
         <div className="mb-16">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
             <div>
               <h2
                 className="text-2xl font-bold text-slate-900 dark:text-white"
@@ -91,12 +88,26 @@ export default function CategoriesPage() {
                 Available Categories
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Our most popular wedding services, ready for booking
+                Our active wedding services, ready for booking
               </p>
             </div>
-            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-200/70 dark:bg-white/10 text-slate-700 dark:text-slate-300">
-              {VENDOR_CATEGORIES.length} Active
-            </span>
+            
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              {/* Quick search input */}
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search categories…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-full border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[var(--sw-primary)]"
+                />
+              </div>
+              <span className="text-xs font-semibold px-3 py-2 rounded-full bg-slate-200/70 dark:bg-white/10 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                {VENDOR_CATEGORIES.length} Active
+              </span>
+            </div>
           </div>
 
           <motion.div
@@ -105,7 +116,7 @@ export default function CategoriesPage() {
             initial="hidden"
             animate="visible"
           >
-            {top12Categories.map((category) => (
+            {filteredCategories.map((category) => (
               <motion.div key={category.slug} variants={itemVariants}>
                 <Link
                   href={`/${category.slug}`}
@@ -151,72 +162,9 @@ export default function CategoriesPage() {
               </motion.div>
             ))}
           </motion.div>
-        </div>
 
-        {/* ── REMAINING CATEGORIES ──────────────────────────────────────────── */}
-        <div className="mt-16 pt-12 border-t border-slate-200 dark:border-white/10">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <div>
-              <h2
-                className="text-2xl font-bold text-slate-900 dark:text-white"
-                style={{ fontFamily: "var(--font-heading)" }}
-              >
-                More Categories
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Every other specialized category, just as ready to book
-              </p>
-            </div>
-
-            {/* Quick search input */}
-            <div className="relative w-full md:w-72">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search more categories…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-full border border-slate-200 dark:border-white/15 bg-white dark:bg-white/5 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[var(--sw-primary)]"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {filteredRemaining.map((category) => {
-              const Icon = category.icon;
-              return (
-                <Link
-                  key={category.slug}
-                  href={`/${category.slug}`}
-                  className="group flex items-center justify-between gap-3 p-3.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200/70 dark:border-white/10 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#FFF5EF] dark:bg-white/10 text-[var(--sw-primary)] group-hover:bg-[var(--sw-primary)] group-hover:text-white transition-colors"
-                    >
-                      <Icon className="w-4 h-4 stroke-[1.5]" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h4
-                        className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[var(--sw-primary)] transition-colors"
-                        style={{ fontFamily: "var(--font-heading)" }}
-                      >
-                        {category.name}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
-                        {category.tagline}
-                      </p>
-                    </div>
-                  </div>
-
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 group-hover:text-[var(--sw-primary)] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-                </Link>
-              );
-            })}
-          </div>
-
-          {filteredRemaining.length === 0 && (
-            <div className="text-center py-12 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10">
+          {filteredCategories.length === 0 && (
+            <div className="text-center py-12 bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 mt-6">
               <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                 No categories matching "{searchQuery}"
               </p>
@@ -234,3 +182,4 @@ export default function CategoriesPage() {
     </div>
   );
 }
+

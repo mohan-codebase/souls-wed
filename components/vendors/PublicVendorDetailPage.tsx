@@ -202,7 +202,7 @@ export default function PublicVendorDetailPage({ vendor: initialVendor }: Public
                   <div className="flex items-center justify-between px-6 py-4">
                     <div>
                       <p className="font-semibold text-slate-800 text-sm">Room Rate</p>
-                      <p className="text-xs text-slate-400">Per room per night, inclusive of taxes</p>
+                      <p className="text-xs text-slate-400">Per room per night, inclusive of taxes · online booking coming soon</p>
                     </div>
                     <p className="text-lg font-bold text-primary-600">
                       {vendor.priceFrom ? formatAsCurrency(vendor.priceFrom, currency) : "On request"}

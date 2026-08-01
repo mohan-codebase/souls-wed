@@ -215,6 +215,12 @@ const navLinks = [
           { label: "Caterers", href: "/caterers" },
           { label: "Decorators", href: "/decorators" },
         ]
+      },
+      {
+        title: "PHOTO & STYLE",
+        items: [
+          { label: "Photographers & Videographers", href: "/photography" },
+        ]
       }
     ],
   },

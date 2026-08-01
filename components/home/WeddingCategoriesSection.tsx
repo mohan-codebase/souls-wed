@@ -1,21 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 import CustomImage from "@/components/shared/CustomImage";
-import { ChevronDownIcon } from "@/components/ui/chevron-down";
-import { ChevronUpIcon } from "@/components/ui/chevron-up";
 import { VENDOR_CATEGORIES } from "@/lib/config/categories";
 import Link from "next/link";
 
-export default function WeddingCategoriesSection({ singleRow = false }: { singleRow?: boolean }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  // If single row, show first 12 items. Else, show 12 initially, and expanding reveals all.
-  const displayedCategories = singleRow
-    ? VENDOR_CATEGORIES.slice(0, 12)
-    : (isExpanded ? VENDOR_CATEGORIES : VENDOR_CATEGORIES.slice(0, 12));
-
+export default function WeddingCategoriesSection() {
   return (
     <section className="py-12 px-4">
       <div className="max-w-7xl mx-auto">
@@ -41,7 +31,7 @@ export default function WeddingCategoriesSection({ singleRow = false }: { single
 
         {/* Categories Flex Container */}
         <div className="flex flex-wrap justify-center gap-4 md:gap-8 mt-8 pb-4 md:pb-0">
-          {displayedCategories.map((cat, i) => {
+          {VENDOR_CATEGORIES.map((cat, i) => {
             return (
               <motion.div
                 key={cat.slug}
@@ -80,27 +70,8 @@ export default function WeddingCategoriesSection({ singleRow = false }: { single
             );
           })}
         </div>
-
-        {!singleRow && VENDOR_CATEGORIES.length > 12 && (
-          <div className="flex justify-center mt-8">
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="flex items-center gap-2 text-sm font-bold px-6 py-3 rounded-full transition-all hover:bg-slate-50 dark:hover:bg-white/5"
-              style={{ color: "var(--sw-primary)", border: "1.5px solid var(--sw-primary)" }}
-            >
-              {isExpanded ? (
-                <>
-                  Show Top 12 Categories <ChevronUpIcon className="w-4 h-4" />
-                </>
-              ) : (
-                <>
-                  View {VENDOR_CATEGORIES.length - 12} More Categories <ChevronDownIcon className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </div>
-        )}
       </div>
     </section>
   );
 }
+

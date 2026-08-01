@@ -415,7 +415,7 @@ export default function VenueDetailPage() {
               <VenueReviews
                 rating={venue.rating}
                 reviewCount={venue.reviewCount}
-                reviews={venue.reviews}
+                reviews={venue.reviews || []}
               />
             </section>
           </div>

@@ -40,11 +40,7 @@ export default function VendorSidebar({ vendor }: VendorSidebarProps) {
     bookingProps.pricePerPlateVeg = (vendor.priceFrom || 50000).toString();
     bookingProps.pricePerPlateNonVeg = (Math.round((vendor.priceFrom || 50000) * 1.2)).toString();
     bookingProps.rentalCost = (vendor.priceFrom ? vendor.priceFrom * 5 : 250000).toString();
-  } else if (isRoom) {
-    bookingTypes = [{ value: "room", label: `Book ${categoryStr}` }];
-    bookingProps.pricePerRoom = vendor.priceFrom || 5000;
-    bookingProps.totalRooms = 10; // Default generic room count
-  } else {
+  } else if (!isRoom) {
     // For Planners, Decorators, etc.
     bookingTypes = [{ value: "vendor", label: `Book ${categoryStr}` }];
     bookingProps.fixedPrice = vendor.priceFrom || 25000;
@@ -54,19 +50,38 @@ export default function VendorSidebar({ vendor }: VendorSidebarProps) {
     <div className="flex flex-col gap-6">
 
       {/* ─── BOOKING FORM ─── */}
-      <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="font-bold text-slate-800 text-sm mb-4">
-          Book {vendor.businessName || vendor.name}
-        </h3>
-        <BookingForm
-          providerId={vendor._id}
-          providerName={vendor.businessName || vendor.name}
-          bookingTypes={bookingTypes}
-          {...bookingProps}
-        />
-      </div>
+      {isRoom ? (
+        <div className="bg-white border border-slate-200 rounded-lg p-5 text-center">
+          <h3 className="font-bold text-slate-800 text-sm mb-2">
+            Room Booking Coming Soon
+          </h3>
+          <p className="text-xs text-slate-500 mb-4">
+            Online booking for rooms isn&apos;t live yet. Reach out directly and we&apos;ll help you sort availability and pricing.
+          </p>
+          <a
+            href={`mailto:hello@soulswed.com?subject=${encodeURIComponent(
+              `Room enquiry — ${vendor.businessName || vendor.name}`
+            )}&body=${encodeURIComponent(`Vendor ID: ${vendor._id}\n\nPlease share availability and pricing for:\n`)}`}
+            className="inline-flex items-center justify-center w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 rounded text-sm transition-colors"
+          >
+            Enquire About Rooms
+          </a>
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-lg p-5">
+          <h3 className="font-bold text-slate-800 text-sm mb-4">
+            Book {vendor.businessName || vendor.name}
+          </h3>
+          <BookingForm
+            providerId={vendor._id}
+            providerName={vendor.businessName || vendor.name}
+            bookingTypes={bookingTypes}
+            {...bookingProps}
+          />
+        </div>
+      )}
 
-      {currency !== "INR" && (
+      {!isRoom && currency !== "INR" && (
         <p className="text-[11px] text-slate-400 text-center -mt-2">
           Prices shown in {currency} for reference — you&apos;ll be charged in INR at checkout.
         </p>

@@ -10,6 +10,7 @@ export const OPTIMIZED_IMAGE_HOSTS: string[] = [
   "i.ytimg.com",
   "res.cloudinary.com",
   "soulswed.com",
+  "api.soulswed.com",
   "lh3.googleusercontent.com",
 ];
 

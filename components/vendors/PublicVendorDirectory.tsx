@@ -21,7 +21,6 @@ import { relevanceSearch } from "@/lib/search";
 import VenueFilterBar from "@/components/venues/VenueFilterBar";
 import ListingCard, { CardTag } from "@/components/shared/ListingCard";
 import VendorCard from "@/components/vendors/VendorCard";
-import WeddingCategoriesSection from "@/components/home/WeddingCategoriesSection";
 import {
   budgetBandLabel,
   categoryBySlug,
@@ -375,10 +374,7 @@ export default function PublicVendorDirectory({
             </div>
           </div>
 
-          {/* ══════════════════════ CATEGORIES ══════════════════════ */}
-          <div className="bg-white">
-            <WeddingCategoriesSection />
-          </div>
+          {/* ══════════════════════ CATEGORIES (Removed: Categories section only on homepage) ══════════════════════ */}
         </>
       ) : (
         <div className="pt-28" />
